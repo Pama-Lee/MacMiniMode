@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<!-- 同 welcome.html：只用富文本能表达的样式，正文颜色跟随系统外观。 -->
+<style>
+    body {
+        margin: 0;
+        font: 13px/1.5 -apple-system, sans-serif;
+    }
+    h1 {
+        margin: 0 0 4px;
+        font-size: 22px;
+        font-weight: 700;
+    }
+    h1 span {
+        color: #2fb463;
+    }
+    p {
+        margin: 0 0 9px;
+    }
+    .lead {
+        margin-bottom: 12px;
+    }
+    code {
+        font: 11px Menlo, monospace;
+        color: #4a7dff;
+    }
+</style>
+</head>
+<body>
+    <h1><span>✓</span> It's already running</h1>
+    <p class="lead">A new icon is in your menu bar and the service has started. No restart needed.</p>
+
+    <p><b>The icon shows the state</b><br>
+    Mac mini icon: on. Laptop icon: off. Click it to switch modes or view the log.</p>
+
+    <p><b>Worth doing</b><br>
+    Always plugged in? Set the charge limit to 80% in System Settings → Battery.</p>
+
+    <p><b>To uninstall</b><br>
+    Run this in Terminal. Sleep settings are restored too:<br>
+    <code>sudo /Applications/MacMiniMode.app/Contents/Resources/uninstall.sh</code></p>
+</body>
+</html>

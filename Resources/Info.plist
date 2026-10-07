@@ -7,7 +7,7 @@
     <key>CFBundleName</key>
     <string>MacMiniMode</string>
     <key>CFBundleDisplayName</key>
-    <string>Mac mini 模式</string>
+    <string>Mac mini Mode</string>
     <key>CFBundleExecutable</key>
     <string>MacMiniMode</string>
     <key>CFBundleIconFile</key>

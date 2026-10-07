@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<!-- 安装器会把这页转成富文本再显示：只有字体、颜色、段落间距这类样式有效，
+     flex、边框、媒体查询都不生效。正文不指定颜色，让它跟随浅色/深色外观。 -->
+<style>
+    body {
+        margin: 0;
+        font: 13px/1.5 -apple-system, sans-serif;
+    }
+    h1 {
+        margin: 0 0 4px;
+        font-size: 22px;
+        font-weight: 700;
+    }
+    p {
+        margin: 0 0 9px;
+    }
+    .lead {
+        margin-bottom: 12px;
+    }
+    .tag {
+        color: #4a7dff;
+        font-weight: 600;
+    }
+    .note {
+        margin: 0;
+        font-size: 11px;
+        color: #8a8a8e;
+    }
+</style>
+</head>
+<body>
+    <h1>Mac mini Mode</h1>
+    <p class="lead">Keep a plugged-in MacBook running with the lid closed. Unplug it and it sleeps like a normal laptop again.</p>
+
+    <p><span class="tag">Plugged in</span> &nbsp; <b>Turns on automatically</b><br>
+    Your Mac stays awake, even with the lid closed.</p>
+
+    <p><span class="tag">Unplugged</span> &nbsp; <b>Turns off automatically</b><br>
+    Normal sleep returns. A closed lid sleeps right away.</p>
+
+    <p><span class="tag">Manual</span> &nbsp; <b>Switch from the menu bar</b><br>
+    Automatic, Always On or Always Off.</p>
+
+    <p class="note">Installs a menu bar app and a background service. Needs an admin password.</p>
+</body>
+</html>

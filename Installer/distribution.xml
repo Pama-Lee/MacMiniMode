@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <installer-gui-script minSpecVersion="2">
-    <title>Mac mini 模式</title>
+    <title>TITLE</title>
     <organization>com.macminimode</organization>
     <domains enable_localSystem="true"/>
     <options customize="never" require-scripts="false" rootVolumeOnly="true" hostArchitectures="arm64,x86_64"/>
@@ -18,7 +18,7 @@
     <choices-outline>
         <line choice="default"/>
     </choices-outline>
-    <choice id="default" title="Mac mini 模式">
+    <choice id="default" title="TITLE">
         <pkg-ref id="com.macminimode.pkg"/>
     </choice>
     <pkg-ref id="com.macminimode.pkg" version="@VERSION@" onConclusion="none">MacMiniMode-component.pkg</pkg-ref>

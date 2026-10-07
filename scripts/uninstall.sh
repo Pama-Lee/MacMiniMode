@@ -1,9 +1,10 @@
 #!/bin/bash
 # 卸载 Mac mini 模式并恢复正常睡眠。用法：sudo ./uninstall.sh
+# Uninstalls Mac mini Mode and restores normal sleep. Usage: sudo ./uninstall.sh
 set -uo pipefail
 
 if [ "$(id -u)" != "0" ]; then
-    echo "请用 sudo 运行：sudo $0" >&2
+    echo "请用 sudo 运行 / Run with sudo: sudo $0" >&2
     exit 1
 fi
 
@@ -23,5 +24,5 @@ pkgutil --forget com.macminimode.pkg >/dev/null 2>&1
 
 pmset -a disablesleep 0
 
-echo "已卸载，睡眠设置已恢复："
+echo "已卸载，睡眠设置已恢复 / Uninstalled, sleep settings restored:"
 pmset -g | grep SleepDisabled

@@ -12,6 +12,10 @@ let notifyPrefix = dryRun ? "com.macminimode.dryrun" : "com.macminimode"
 let modeFile = "/var/db/macmini-mode"
 setvbuf(stdout, nil, _IOLBF, 0)
 
+// 界面和日志跟随系统首选语言：中文环境用中文，其余用英文。
+let isChinese = Locale.preferredLanguages.first?.hasPrefix("zh") ?? false
+func L(_ zh: String, _ en: String) -> String { isChinese ? zh : en }
+
 enum Mode: UInt64, CaseIterable {
     case auto = 0, on = 1, off = 2
 
@@ -25,9 +29,9 @@ enum Mode: UInt64, CaseIterable {
 
     var label: String {
         switch self {
-        case .auto: return "自动"
-        case .on: return "始终开启"
-        case .off: return "始终关闭"
+        case .auto: return L("自动", "Automatic")
+        case .on: return L("始终开启", "Always On")
+        case .off: return L("始终关闭", "Always Off")
         }
     }
 }
@@ -71,11 +75,11 @@ func pmset(_ args: [String]) -> Bool {
         try task.run()
         task.waitUntilExit()
     } catch {
-        log("pmset \(args.joined(separator: " ")) 启动失败: \(error.localizedDescription)")
+        log("pmset \(args.joined(separator: " ")) \(L("启动失败", "failed to launch")): \(error.localizedDescription)")
         return false
     }
     if task.terminationStatus != 0 {
-        log("pmset \(args.joined(separator: " ")) 退出码 \(task.terminationStatus)")
+        log("pmset \(args.joined(separator: " ")) \(L("退出码", "exited with status")) \(task.terminationStatus)")
         return false
     }
     return true
@@ -96,8 +100,13 @@ func sync() {
     guard want != current else { return }
     guard pmset(["-a", "disablesleep", want ? "1" : "0"]) else { return }
     State.applied = want
-    let reason = State.mode == .auto ? (want ? "接入电源" : "使用电池") : State.mode.label
-    log("\(reason) → Mac mini 模式\(want ? "开启 (disablesleep 1)" : "关闭 (disablesleep 0)")")
+    let reason = State.mode == .auto
+        ? (want ? L("接入电源", "On AC power") : L("使用电池", "On battery"))
+        : State.mode.label
+    let outcome = want
+        ? L("Mac mini 模式开启 (disablesleep 1)", "Mac mini mode on (disablesleep 1)")
+        : L("Mac mini 模式关闭 (disablesleep 0)", "Mac mini mode off (disablesleep 0)")
+    log("\(reason) → \(outcome)")
 
     // 清掉 disablesleep 并不会让已经合盖的机器自己睡下去，这里补一脚，免得在包里发热。
     // AppleClamshellCausesSleep 是内核自己的判断：接着外接显示器时为 No，就不打扰。
@@ -106,7 +115,7 @@ func sync() {
             guard !wantsMacMiniMode(),
                   rootDomainFlag("AppleClamshellState"),
                   rootDomainFlag("AppleClamshellCausesSleep") else { return }
-            log("已合盖且允许睡眠 → 立即睡眠")
+            log(L("已合盖且允许睡眠 → 立即睡眠", "Lid closed and sleep allowed → sleeping now"))
             pmset(["sleepnow"])
         }
     }
@@ -120,12 +129,12 @@ func publishMode() {
 func setMode(_ mode: Mode) {
     guard mode != State.mode else { return }
     State.mode = mode
-    log("模式切换为：\(mode.label)")
+    log(L("模式切换为：", "Mode set to: ") + mode.label)
     if !dryRun {
         do {
             try mode.name.write(toFile: modeFile, atomically: true, encoding: .utf8)
         } catch {
-            log("保存模式失败: \(error.localizedDescription)")
+            log(L("保存模式失败", "Failed to save mode") + ": \(error.localizedDescription)")
         }
     }
     publishMode()
@@ -133,7 +142,7 @@ func setMode(_ mode: Mode) {
 }
 
 func shutdown(_ name: String) {
-    log("收到 \(name)，恢复 disablesleep 0 后退出")
+    log(L("收到 \(name)，恢复 disablesleep 0 后退出", "Received \(name), restoring disablesleep 0 and exiting"))
     pmset(["-a", "disablesleep", "0"])
     exit(0)
 }
@@ -148,7 +157,7 @@ for (sig, name) in [(SIGTERM, "SIGTERM"), (SIGINT, "SIGINT")] {
 }
 
 guard let runLoopSource = IOPSNotificationCreateRunLoopSource({ _ in sync() }, nil)?.takeRetainedValue() else {
-    log("无法注册电源变化通知")
+    log(L("无法注册电源变化通知", "Could not register for power source notifications"))
     exit(1)
 }
 CFRunLoopAddSource(CFRunLoopGetMain(), runLoopSource, .defaultMode)
@@ -173,7 +182,8 @@ timer.schedule(deadline: .now() + 60, repeating: 60)
 timer.setEventHandler { sync() }
 timer.resume()
 
-log("macmini-moded 启动\(dryRun ? "（dry-run）" : "")，模式：\(State.mode.label)")
+log(L("macmini-moded 启动", "macmini-moded started") + (dryRun ? " (dry-run)" : "")
+    + L("，模式：", ", mode: ") + State.mode.label)
 publishMode()
 sync()
 CFRunLoopRun()

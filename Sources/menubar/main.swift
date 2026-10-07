@@ -9,11 +9,15 @@ import notify
 let logPath = "/var/log/macmini-mode.log"
 let notifyPrefix = "com.macminimode"
 
+// 界面和日志跟随系统首选语言：中文环境用中文，其余用英文。
+let isChinese = Locale.preferredLanguages.first?.hasPrefix("zh") ?? false
+func L(_ zh: String, _ en: String) -> String { isChinese ? zh : en }
+
 // 与 macmini-moded 里 Mode 的 rawValue / name 对应。
 let modes: [(name: String, title: String)] = [
-    ("auto", "自动（插电开启，拔电关闭）"),
-    ("on", "始终开启（用电池也不睡眠）"),
-    ("off", "始终关闭"),
+    ("auto", L("自动（插电开启，拔电关闭）", "Automatic (on when plugged in)")),
+    ("on", L("始终开启（用电池也不睡眠）", "Always On (stays awake on battery)")),
+    ("off", L("始终关闭", "Always Off")),
 ]
 
 func rootDomainFlag(_ key: String) -> Bool {
@@ -28,7 +32,7 @@ func rootDomainFlag(_ key: String) -> Bool {
 func powerDescription() -> String {
     let info = IOPSCopyPowerSourcesInfo().takeRetainedValue()
     let type = IOPSGetProvidingPowerSourceType(info).takeUnretainedValue() as String
-    var text = type == kIOPSACPowerValue ? "电源适配器" : "电池"
+    var text = type == kIOPSACPowerValue ? L("电源适配器", "Power Adapter") : L("电池", "Battery")
     let sources = IOPSCopyPowerSourcesList(info).takeRetainedValue() as [CFTypeRef]
     for source in sources {
         guard let desc = IOPSGetPowerSourceDescription(info, source)?.takeUnretainedValue() as? [String: Any],
@@ -80,10 +84,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             menu.addItem(item)
         }
         menu.addItem(.separator())
-        let logItem = NSMenuItem(title: "查看日志", action: #selector(openLog), keyEquivalent: "l")
+        let logItem = NSMenuItem(title: L("查看日志", "View Log"), action: #selector(openLog), keyEquivalent: "l")
         logItem.target = self
         menu.addItem(logItem)
-        menu.addItem(NSMenuItem(title: "退出", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
+        menu.addItem(NSMenuItem(title: L("退出", "Quit"), action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
         statusItem.menu = menu
 
         notify_register_dispatch("\(notifyPrefix).state", &stateToken, .main) { [weak self] _ in
@@ -118,14 +122,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         notify_get_state(stateToken, &rawMode)
 
         let symbol = !running ? "exclamationmark.triangle" : (enabled ? "macmini.fill" : "laptopcomputer")
-        let image = NSImage(systemSymbolName: symbol, accessibilityDescription: "Mac mini 模式")
+        let name = L("Mac mini 模式", "Mac mini Mode")
+        let image = NSImage(systemSymbolName: symbol, accessibilityDescription: name)
         image?.isTemplate = true
         statusItem.button?.image = image
-        statusItem.button?.toolTip = "Mac mini 模式：\(enabled ? "开启" : "关闭")"
+        statusItem.button?.toolTip = name + L("：", ": ") + (enabled ? L("开启", "On") : L("关闭", "Off"))
 
-        modeItem.title = "Mac mini 模式：\(enabled ? "开启（合盖继续运行）" : "关闭（正常睡眠）")"
-        powerItem.title = "供电：\(powerDescription())"
-        daemonItem.title = "守护进程：\(running ? "运行中" : "未运行")"
+        modeItem.title = name + L("：", ": ") + (enabled
+            ? L("开启（合盖继续运行）", "On (keeps running with the lid closed)")
+            : L("关闭（正常睡眠）", "Off (sleeps normally)"))
+        powerItem.title = L("供电：", "Power: ") + powerDescription()
+        daemonItem.title = L("后台服务：", "Background service: ") + (running ? L("运行中", "Running") : L("未运行", "Not running"))
         for item in switchItems {
             item.isEnabled = running
             item.state = running && item.tag == Int(rawMode) ? .on : .off

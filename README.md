@@ -1,33 +1,37 @@
 <p align="center">
-  <img src="docs/icon.png" width="128" alt="Mac mini 模式">
+  <img src="docs/icon.png" width="128" alt="Mac mini Mode icon">
 </p>
 
-<h1 align="center">Mac mini 模式</h1>
+<h1 align="center">Mac mini Mode</h1>
 
-<p align="center">让插着电的 MacBook 合上盖子也能一直运行；拔掉电源，它又是一台正常睡眠的笔记本。</p>
+<p align="center">Keep a plugged-in MacBook running with the lid closed. Unplug it and it sleeps like a normal laptop again.</p>
 
-## 功能
+<p align="center"><b>English</b> · <a href="README.zh-CN.md">简体中文</a></p>
 
-- **插电自动开启**：接入电源后不再睡眠，合盖、不接显示器也照常运行。
-- **拔电自动关闭**：切到电池立即恢复正常睡眠；已合盖则直接入睡，不会在包里发热。
-- **菜单栏切换**：自动、始终开启、始终关闭三档，当前状态一眼可见。
+Mac mini Mode turns a MacBook into an always-on home server or headless Mac. It gives you clamshell mode without an external display or a dummy HDMI plug, and there is no `caffeinate` or `sudo pmset disablesleep` to remember. Because it follows the power adapter, your MacBook never stays awake inside your bag.
 
-## 安装
+## Features
 
-到 [Releases](../../releases) 下载最新的 `.pkg`，双击安装即可，装完立即生效。
+- **On when plugged in**: sleep is disabled on AC power, so your Mac keeps running with the lid closed and no display attached.
+- **Off when unplugged**: normal sleep returns on battery. If the lid is already closed, the Mac sleeps right away.
+- **Menu bar control**: switch between Automatic, Always On and Always Off, and see the current state at a glance.
 
-支持 macOS 13 及以上，Apple 芯片和 Intel 均可。
+## Install
+
+Download the latest `.pkg` from [Releases](../../releases/latest) and open it. It takes effect as soon as the installer finishes.
+
+The installer is signed and notarized by Apple. Requires macOS 13 or later, on Apple silicon or Intel.
 
 <p align="center">
-  <img src="docs/installer.png" width="620" alt="安装器界面">
+  <img src="docs/installer-en.png" width="620" alt="Mac mini Mode installer">
 </p>
 
-## 卸载
+## Uninstall
 
 ```bash
 sudo /Applications/MacMiniMode.app/Contents/Resources/uninstall.sh
 ```
 
-## 许可
+## License
 
 [MIT](LICENSE)
