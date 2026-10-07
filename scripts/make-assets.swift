@@ -1,5 +1,5 @@
 // 生成应用图标和安装器背景图。用法：swift scripts/make-assets.swift
-// 输出：Resources/AppIcon.icns、Installer/Resources/background.png
+// 输出：Resources/AppIcon.icns、Installer/Resources/background.png、docs/social-preview.png
 
 import AppKit
 
@@ -120,6 +120,47 @@ func drawBackground() {
     drawIcon(120)
 }
 
+// GitHub 社交预览图，1280×640。重要内容离边缘至少 80px，避免被各平台裁掉。
+func drawSocialPreview() {
+    let canvas = NSRect(x: 0, y: 0, width: 1280, height: 640)
+    NSGradient(colors: [rgb(0.04, 0.05, 0.12), rgb(0.09, 0.13, 0.28), rgb(0.17, 0.24, 0.48)])!
+        .draw(in: canvas, angle: 35)
+    // 图标背后的一团光，把它从同色系的背景里托出来。
+    NSGradient(colors: [rgb(0.42, 0.55, 1.0, 0.38), rgb(0.42, 0.55, 1.0, 0)])!
+        .draw(fromCenter: NSPoint(x: 290, y: 320), radius: 0, toCenter: NSPoint(x: 290, y: 320), radius: 380, options: [])
+
+    NSGraphicsContext.saveGraphicsState()
+    let transform = NSAffineTransform()
+    transform.translateX(by: 96, yBy: 126)
+    transform.concat()
+    drawIcon(388)
+    NSGraphicsContext.restoreGraphicsState()
+
+    func text(_ string: String, size: CGFloat, weight: NSFont.Weight, alpha: CGFloat, kern: CGFloat = 0) -> NSAttributedString {
+        NSAttributedString(string: string, attributes: [
+            .font: NSFont.systemFont(ofSize: size, weight: weight),
+            .foregroundColor: rgb(1, 1, 1, alpha),
+            .kern: kern,
+        ])
+    }
+
+    let left: CGFloat = 540
+    text("Mac mini Mode", size: 88, weight: .bold, alpha: 1, kern: -1.5).draw(at: NSPoint(x: left - 4, y: 356))
+    text("Keep a plugged-in MacBook running", size: 34, weight: .regular, alpha: 0.82).draw(at: NSPoint(x: left, y: 292))
+    text("with the lid closed.", size: 34, weight: .regular, alpha: 0.82).draw(at: NSPoint(x: left, y: 248))
+
+    var x = left
+    for label in ["No external display", "Auto-off on battery", "Menu bar app"] {
+        let chip = text(label, size: 20, weight: .medium, alpha: 0.92)
+        let size = chip.size()
+        let rect = NSRect(x: x, y: 158, width: size.width + 32, height: 42)
+        rgb(1, 1, 1, 0.13).setFill()
+        NSBezierPath(roundedRect: rect, xRadius: 21, yRadius: 21).fill()
+        chip.draw(at: NSPoint(x: rect.minX + 16, y: rect.midY - size.height / 2))
+        x = rect.maxX + 12
+    }
+}
+
 let fm = FileManager.default
 let iconset = fm.temporaryDirectory.appendingPathComponent("AppIcon-\(ProcessInfo.processInfo.processIdentifier).iconset")
 try! fm.createDirectory(at: iconset, withIntermediateDirectories: true)
@@ -140,6 +181,8 @@ try? fm.removeItem(at: iconset)
 let paneSize = NSSize(width: 620, height: 418)
 write(render(pixelsWide: 1240, pixelsHigh: 836, pointSize: paneSize, drawBackground),
       to: "Installer/Resources/background.png")
+write(render(pixelsWide: 1280, pixelsHigh: 640, pointSize: NSSize(width: 1280, height: 640), drawSocialPreview),
+      to: "docs/social-preview.png")
 
 // 预览用的大图，不入库。
 if CommandLine.arguments.contains("--preview") {
