@@ -1,0 +1,11 @@
+#!/bin/bash
+# 启动守护进程，并为当前登录用户拉起菜单栏图标（其他用户下次登录时自动启动）。
+
+CONSOLE_UID=$(stat -f %u /dev/console)
+
+launchctl bootstrap system /Library/LaunchDaemons/com.macminimode.daemon.plist
+if [ "$CONSOLE_UID" != "0" ]; then
+    launchctl bootstrap "gui/$CONSOLE_UID" /Library/LaunchAgents/com.macminimode.menubar.plist
+fi
+
+exit 0

@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="zh-Hans">
+<head>
+<meta charset="utf-8">
+<!-- 安装器会把这页转成富文本再显示：只有字体、颜色、段落间距这类样式有效，
+     flex、边框、媒体查询都不生效。正文不指定颜色，让它跟随浅色/深色外观。 -->
+<style>
+    body {
+        margin: 0;
+        font: 13px/1.5 -apple-system, "PingFang SC", sans-serif;
+    }
+    h1 {
+        margin: 0 0 4px;
+        font-size: 22px;
+        font-weight: 700;
+    }
+    p {
+        margin: 0 0 9px;
+    }
+    .lead {
+        margin-bottom: 12px;
+    }
+    .tag {
+        color: #4a7dff;
+        font-weight: 600;
+    }
+    .note {
+        margin: 0;
+        font-size: 11px;
+        color: #8a8a8e;
+    }
+</style>
+</head>
+<body>
+    <h1>Mac mini 模式</h1>
+    <p class="lead">让插着电的 MacBook 合上盖子也能一直运行；拔掉电源，它又是一台正常睡眠的笔记本。</p>
+
+    <p><span class="tag">插电</span>　<b>自动开启</b><br>
+    接入电源后不再睡眠，合上盖子，服务照常运行。</p>
+
+    <p><span class="tag">拔电</span>　<b>自动关闭</b><br>
+    切到电池即恢复正常睡眠；已合盖则直接入睡，不会在包里发热。</p>
+
+    <p><span class="tag">手动</span>　<b>菜单栏切换</b><br>
+    自动、始终开启、始终关闭三档，当前状态一眼可见。</p>
+
+    <p class="note">将安装一个菜单栏应用和一个后台服务，过程需要管理员密码。</p>
+</body>
+</html>

@@ -1,0 +1,11 @@
+#!/bin/bash
+# 升级安装前先停掉旧版本。守护进程收到 SIGTERM 会自己恢复 disablesleep 0。
+
+CONSOLE_UID=$(stat -f %u /dev/console)
+
+launchctl bootout system/com.macminimode.daemon 2>/dev/null
+if [ "$CONSOLE_UID" != "0" ]; then
+    launchctl bootout "gui/$CONSOLE_UID/com.macminimode.menubar" 2>/dev/null
+fi
+
+exit 0

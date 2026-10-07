@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="zh-Hans">
+<head>
+<meta charset="utf-8">
+<!-- 同 welcome.html：只用富文本能表达的样式，正文颜色跟随系统外观。 -->
+<style>
+    body {
+        margin: 0;
+        font: 13px/1.5 -apple-system, "PingFang SC", sans-serif;
+    }
+    h1 {
+        margin: 0 0 4px;
+        font-size: 22px;
+        font-weight: 700;
+    }
+    h1 span {
+        color: #2fb463;
+    }
+    p {
+        margin: 0 0 9px;
+    }
+    .lead {
+        margin-bottom: 12px;
+    }
+    code {
+        font: 11px Menlo, monospace;
+        color: #4a7dff;
+    }
+</style>
+</head>
+<body>
+    <h1><span>✓</span> 已经在运行了</h1>
+    <p class="lead">菜单栏多了一个图标，后台服务已启动，不需要重启电脑。</p>
+
+    <p><b>看图标就知道状态</b><br>
+    Mac mini 图标表示模式开启，笔记本图标表示关闭。点开可以切换三档模式、查看日志。</p>
+
+    <p><b>建议顺手做一件事</b><br>
+    长期插电使用时，到「系统设置 → 电池」把充电上限设为 80%，对电池更友好。</p>
+
+    <p><b>想卸载时</b><br>
+    在终端运行下面这行，睡眠设置会一并恢复：<br>
+    <code>sudo /Applications/MacMiniMode.app/Contents/Resources/uninstall.sh</code></p>
+</body>
+</html>
