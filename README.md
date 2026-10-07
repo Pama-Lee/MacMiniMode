@@ -20,7 +20,7 @@
 2. Double-click it and follow the installer. You will be asked for your Mac password once.
 3. A new icon appears in the menu bar. It is already working, no restart needed.
 
-The installer is signed and notarized by Apple, so macOS opens it without warnings. Requires macOS 13 or later, on Apple silicon or Intel.
+The installer is signed and notarized by Apple, so macOS opens it without warnings. Requires macOS 12 or later, on Apple silicon or Intel.
 
 <p align="center">
   <img src="docs/installer-en.png" width="620" alt="Mac mini Mode installer">

@@ -9,7 +9,7 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 VERSION=${VERSION:-$(cat VERSION)}
-MIN_OS=13.0
+MIN_OS=12.0
 BUILD=build
 ROOT=$BUILD/root
 APP=$ROOT/Applications/MacMiniMode.app

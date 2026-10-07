@@ -18,7 +18,7 @@
 2. 双击打开，一路点「继续」，中途输入一次开机密码。
 3. 装完菜单栏会多出一个图标，这时已经在工作了，不用重启。
 
-安装包已签名并通过 Apple 公证，打开时不会提示「无法验证开发者」。支持 macOS 13 及以上，Apple 芯片和 Intel 均可。
+安装包已签名并通过 Apple 公证，打开时不会提示「无法验证开发者」。支持 macOS 12 及以上，Apple 芯片和 Intel 均可。
 
 <p align="center">
   <img src="docs/installer-zh.png" width="620" alt="Mac mini 模式安装器">
