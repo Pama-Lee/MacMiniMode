@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="180" height="56" viewBox="0 0 180 56" role="img" aria-label="下载安装包">
+  <rect width="180" height="56" rx="14" fill="#1f6feb"/>
+  <path d="M34 17v15m0 0l-7-7m7 7l7-7M25 39h18" fill="none" stroke="#fff" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>
+  <text x="58" y="35" fill="#fff" font-family="-apple-system, 'SF Pro Text', 'PingFang SC', 'Helvetica Neue', Arial, sans-serif" font-size="20" font-weight="600">下载安装包</text>
+</svg>

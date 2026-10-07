@@ -86,6 +86,9 @@ if [ -n "$PKG_IDENTITY" ] && [ -n "$NOTARY_PROFILE" ]; then
     xcrun stapler staple "$PKG"
 fi
 
+# README 的下载按钮指向 releases/latest/download/MacMiniMode.pkg，发版时把这个不带版本号的副本一起上传。
+cp "$PKG" "$BUILD/MacMiniMode.pkg"
+
 echo "==> 完成：$PKG"
 if [ -z "$PKG_IDENTITY" ]; then
     echo "    未签名：只适合本机测试，别人下载后会被 Gatekeeper 拦截"
