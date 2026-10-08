@@ -1,4 +1,4 @@
-// 检查更新：每天向 GitHub 查一次最新版本，有新版就下载、校验签名，然后提示安装。
+// 检查更新：每天向 GitHub 的发布页查一次最新版本，有新版就下载、校验签名，然后提示安装。
 // 安装本身交给系统安装器，这里不碰管理员权限。
 
 import AppKit
@@ -50,41 +50,40 @@ final class Updater {
         }
         guard !busy else { return }
         busy = true
-        var request = URLRequest(url: URL(string: "https://api.github.com/repos/\(Self.repo)/releases/latest")!,
+        // 不走 api.github.com：它按 IP 限流（未登录每小时 60 次），很多人共用出口的代理节点经常被用光。
+        // 发布页的 latest 地址会跳转到带版本号的地址，从跳转后的地址里读版本号，不占 API 配额。
+        var request = URLRequest(url: URL(string: "https://github.com/\(Self.repo)/releases/latest")!,
                                  timeoutInterval: 20)
-        request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
+        request.httpMethod = "HEAD"
         request.setValue("MacMiniMode/\(current)", forHTTPHeaderField: "User-Agent")
-        URLSession.shared.dataTask(with: request) { data, response, error in
-            DispatchQueue.main.async { self.handleRelease(data, response, error, manual: manual) }
+        URLSession.shared.dataTask(with: request) { _, response, error in
+            DispatchQueue.main.async { self.handleRelease(response, error, manual: manual) }
         }.resume()
     }
 
-    private func handleRelease(_ data: Data?, _ response: URLResponse?, _ error: Error?, manual: Bool) {
-        guard let data, (response as? HTTPURLResponse)?.statusCode == 200,
-              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let tag = json["tag_name"] as? String else {
+    private func handleRelease(_ response: URLResponse?, _ error: Error?, manual: Bool) {
+        // 跳转后的地址形如 https://github.com/<repo>/releases/tag/v1.2.3
+        let prefix = "/\(Self.repo)/releases/tag/"
+        guard let http = response as? HTTPURLResponse, http.statusCode == 200,
+              let url = http.url, url.host == "github.com", url.path.hasPrefix(prefix) else {
             NSLog("[update] check failed: %@", error?.localizedDescription ?? "unexpected response")
             return finish(manual, failure: L("无法连接 GitHub 检查更新，请稍后再试。", "Could not reach GitHub to check for updates. Try again later."))
         }
+        let tag = String(url.path.dropFirst(prefix.count))
         UserDefaults.standard.set(Date().timeIntervalSince1970, forKey: Self.lastCheckKey)
         let latest = tag.hasPrefix("v") ? String(tag.dropFirst()) : tag
         guard Self.isNewer(latest, than: current) else {
             NSLog("[update] up to date (%@, latest %@)", current, latest)
             return finish(manual, info: L("已是最新版本（\(current)）。", "You're up to date (\(current))."))
         }
-        // 只接受本仓库发布页上的那个固定文件名，别的地址一律不下。
-        let prefix = "https://github.com/\(Self.repo)/releases/download/"
-        let assets = json["assets"] as? [[String: Any]] ?? []
-        guard let asset = assets.first(where: { $0["name"] as? String == Self.assetName }),
-              let link = asset["browser_download_url"] as? String, link.hasPrefix(prefix),
-              let url = URL(string: link) else {
-            NSLog("[update] %@ has no %@ asset", tag, Self.assetName)
-            return finish(manual, failure: L("新版本 \(latest) 还没有可下载的安装包。", "Version \(latest) has no installer to download yet."))
+        // 只下本仓库这个版本发布页上的固定文件名。
+        guard let download = URL(string: "https://github.com/\(Self.repo)/releases/download/\(tag)/\(Self.assetName)") else {
+            return finish(manual, failure: L("新版本 \(latest) 的下载地址无效。", "Version \(latest) has an invalid download address."))
         }
         NSLog("[update] downloading %@", latest)
-        URLSession.shared.downloadTask(with: url) { temp, _, error in
+        URLSession.shared.downloadTask(with: download) { temp, response, error in
             var pkg: URL?
-            if let temp {
+            if let temp, (response as? HTTPURLResponse)?.statusCode == 200 {
                 let dest = self.cacheDir.appendingPathComponent("MacMiniMode-\(latest).pkg")
                 try? FileManager.default.createDirectory(at: self.cacheDir, withIntermediateDirectories: true)
                 try? FileManager.default.removeItem(at: dest)
