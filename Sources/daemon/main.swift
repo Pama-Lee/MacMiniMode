@@ -5,6 +5,7 @@
 import Foundation
 import IOKit
 import IOKit.ps
+import IOKit.pwr_mgt
 import notify
 
 let dryRun = CommandLine.arguments.contains("--dry-run")
@@ -40,6 +41,10 @@ enum State {
     nonisolated(unsafe) static var mode = Mode.auto
     nonisolated(unsafe) static var applied: Bool?
     nonisolated(unsafe) static var stateToken: Int32 = 0
+    nonisolated(unsafe) static var assertion: IOPMAssertionID = 0
+    nonisolated(unsafe) static var overrides = 0
+    nonisolated(unsafe) static var burstStart = Date.distantPast
+    nonisolated(unsafe) static var burst = 0
 }
 
 func log(_ message: String) {
@@ -93,13 +98,56 @@ func wantsMacMiniMode() -> Bool {
     }
 }
 
+// 第二道保险。disablesleep 管的是合盖睡眠，但别的程序改电源设置时会把它清掉；
+// 这个断言管空闲睡眠，在 disablesleep 被清掉到我们补回去之间，机器不会因为没人操作而睡着。
+func holdAssertion(_ on: Bool) {
+    if on, State.assertion == 0 {
+        var id: IOPMAssertionID = 0
+        let result = IOPMAssertionCreateWithName(
+            "PreventSystemSleep" as CFString, IOPMAssertionLevel(kIOPMAssertionLevelOn),
+            "Mac mini Mode" as CFString, &id)
+        if result == kIOReturnSuccess {
+            State.assertion = id
+        } else {
+            log(L("创建防睡眠断言失败", "Could not create the sleep assertion") + " (\(result))")
+        }
+    } else if !on, State.assertion != 0 {
+        IOPMAssertionRelease(State.assertion)
+        State.assertion = 0
+    }
+}
+
 func sync() {
     let want = wantsMacMiniMode()
-    // 以系统里的真实值为准，别的工具或手动 pmset 改掉了也能在下一轮对账时纠正回来。
+    holdAssertion(want)
+    // 以系统里的真实值为准，别的工具或手动 pmset 改掉了也要纠正回来。
     let current = dryRun ? State.applied : rootDomainFlag("SleepDisabled")
-    guard want != current else { return }
+    guard want != current else {
+        State.applied = want
+        return
+    }
+    let overridden = State.applied == want
+    if overridden {
+        // 万一对方也是一被改就立刻改回去，两边会无休止地拉锯。每 10 秒最多纠正 5 次，其余的留给下一轮。
+        let now = Date()
+        if now.timeIntervalSince(State.burstStart) > 10 {
+            State.burstStart = now
+            State.burst = 0
+        }
+        State.burst += 1
+        guard State.burst <= 5 else { return }
+    }
     guard pmset(["-a", "disablesleep", want ? "1" : "0"]) else { return }
     State.applied = want
+    if overridden {
+        // 有的机器上每隔几分钟就会被改一次，只记前几次和之后每 50 次，免得日志刷屏。
+        State.overrides += 1
+        if State.overrides <= 3 || State.overrides % 50 == 0 {
+            log(L("睡眠设置被其他程序改动，已恢复为 disablesleep \(want ? 1 : 0)（第 \(State.overrides) 次）",
+                  "Sleep setting was changed by another program; restored disablesleep \(want ? 1 : 0) (#\(State.overrides))"))
+        }
+        return
+    }
     let reason = State.mode == .auto
         ? (want ? L("接入电源", "On AC power") : L("使用电池", "On battery"))
         : State.mode.label
@@ -176,9 +224,18 @@ for mode in Mode.allCases {
     commandTokens.append(token)
 }
 
-// 兜底：万一漏掉一次通知（比如睡眠期间拔电），每分钟对一次账。
+// 别的程序改电源设置时会顺带清掉 disablesleep（实测有机器每 10 分钟被清一次）。
+// 系统在设置变化时会发这个通知，但通知到达时新值还没写进内核，所以收到后隔一小会儿再对几次账。
+var prefsToken: Int32 = 0
+notify_register_dispatch("com.apple.system.powermanagement.prefschange", &prefsToken, .main) { _ in
+    for delay in [0, 0.2, 1, 2.5] {
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay) { sync() }
+    }
+}
+
+// 兜底：万一漏掉通知（比如睡眠期间拔电），每 5 秒对一次账。只读一个系统属性，开销可以忽略。
 let timer = DispatchSource.makeTimerSource(queue: .main)
-timer.schedule(deadline: .now() + 60, repeating: 60)
+timer.schedule(deadline: .now() + 5, repeating: 5)
 timer.setEventHandler { sync() }
 timer.resume()
 

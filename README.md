@@ -34,6 +34,10 @@ Mac mini Mode turns a MacBook into an always-on home server or headless Mac. It 
 - **Off when unplugged**: normal sleep returns on battery. If the lid is already closed, the Mac sleeps right away.
 - **Menu bar control**: switch between Automatic, Always On and Always Off, and see the current state at a glance.
 
+## Troubleshooting
+
+Update to the latest version first. If your Mac still sleeps with the lid closed, choose **View Log** from the menu bar icon and post it in [Issues](../../issues). A common cause is remote desktop or cleaner software that rewrites power settings on a timer; the app now restores the setting right away and notes it in the log.
+
 ## Uninstall
 
 ```bash
