@@ -1,0 +1,49 @@
+#!/bin/sh
+# Mac mini 模式命令行 / Mac mini Mode command line
+#   macminimode            查看状态 / show status
+#   macminimode auto|on|off  切换模式 / switch mode
+#   macminimode log [N]    最近 N 行日志 / last N log lines
+#   macminimode check      体检并输出诊断信息 / health check and diagnostics
+# 快捷指令里用「运行 Shell 脚本」调用即可。In Shortcuts, call it from "Run Shell Script".
+
+PREFIX=${MACMINIMODE_PREFIX:-com.macminimode}
+APP=/Applications/MacMiniMode.app
+LOG=/var/log/macmini-mode.log
+
+status() {
+    mode=$(/usr/bin/notifyutil -g "$PREFIX.state" 2>/dev/null | awk '{print $2}')
+    case "$mode" in
+        1) mode="始终开启 always on" ;;
+        2) mode="始终关闭 always off" ;;
+        *) mode="自动 automatic" ;;
+    esac
+    if /usr/bin/pgrep -x macmini-moded >/dev/null; then daemon="运行中 running"; else daemon="未运行 not running"; mode="-"; fi
+    if /usr/bin/pmset -g | grep -q "SleepDisabled[[:space:]]*1"; then awake="开启 on（合盖继续运行 stays awake with the lid closed）"; else awake="关闭 off（正常睡眠 sleeps normally）"; fi
+    power=$(/usr/bin/pmset -g ps | head -n 1 | sed "s/.*'\(.*\)'.*/\1/")
+    battery=$(/usr/bin/pmset -g ps | grep -o '[0-9]*%' | head -n 1)
+    version=$(/usr/bin/defaults read "$APP/Contents/Info" CFBundleShortVersionString 2>/dev/null)
+    echo "Mac mini 模式 Mode:   $awake"
+    echo "设定 Setting:         $mode"
+    echo "供电 Power:           $power ${battery}"
+    echo "后台服务 Service:     $daemon"
+    echo "版本 Version:         ${version:-?}"
+}
+
+case "${1:-status}" in
+    status) status ;;
+    auto|on|off)
+        if ! /usr/bin/pgrep -x macmini-moded >/dev/null; then
+            echo "后台服务未运行，无法切换 / The background service is not running" >&2
+            exit 1
+        fi
+        /usr/bin/notifyutil -p "$PREFIX.set-$1"
+        sleep 1
+        status
+        ;;
+    log) /usr/bin/tail -n "${2:-30}" "$LOG" ;;
+    check) "$APP/Contents/MacOS/MacMiniMode" --print-diagnostics ;;
+    *)
+        echo "用法 Usage: macminimode [status|auto|on|off|log [N]|check]" >&2
+        exit 2
+        ;;
+esac

@@ -12,9 +12,5 @@
     <true/>
     <key>KeepAlive</key>
     <true/>
-    <key>StandardOutPath</key>
-    <string>/var/log/macmini-mode.log</string>
-    <key>StandardErrorPath</key>
-    <string>/var/log/macmini-mode.log</string>
 </dict>
 </plist>

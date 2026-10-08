@@ -1,5 +1,6 @@
 // macmini-moded — 插电时禁止睡眠（合盖也继续跑），拔电时恢复正常睡眠。
 // 以 root 身份作为 LaunchDaemon 运行；--dry-run 只打印不执行。
+// 测试用参数（仅 --dry-run 下生效）：--simulate-power=ac|battery、--simulate-battery=<百分比>；--log-file=<路径> 把日志写到指定文件。
 // 菜单栏通过 Darwin 通知切换模式：<prefix>.set-auto / set-on / set-off，当前模式发布在 <prefix>.state。
 
 import Foundation
@@ -12,6 +13,14 @@ let dryRun = CommandLine.arguments.contains("--dry-run")
 let notifyPrefix = dryRun ? "com.macminimode.dryrun" : "com.macminimode"
 let modeFile = "/var/db/macmini-mode"
 setvbuf(stdout, nil, _IOLBF, 0)
+
+func argValue(_ name: String) -> String? {
+    CommandLine.arguments.first { $0.hasPrefix(name + "=") }.map { String($0.dropFirst(name.count + 1)) }
+}
+let logFile = argValue("--log-file") ?? "/var/log/macmini-mode.log"
+let logToFile = !dryRun || argValue("--log-file") != nil
+let simulatedPower = dryRun ? argValue("--simulate-power") : nil
+let simulatedBattery = dryRun ? argValue("--simulate-battery").flatMap { Int($0) } : nil
 
 // 界面和日志跟随系统首选语言：中文环境用中文，其余用英文。
 let isChinese = Locale.preferredLanguages.first?.hasPrefix("zh") ?? false
@@ -45,17 +54,44 @@ enum State {
     nonisolated(unsafe) static var overrides = 0
     nonisolated(unsafe) static var burstStart = Date.distantPast
     nonisolated(unsafe) static var burst = 0
+    nonisolated(unsafe) static var overridesToken: Int32 = 0
+    nonisolated(unsafe) static var lowBattery = false
 }
 
 func log(_ message: String) {
-    let stamp = ISO8601DateFormatter().string(from: Date())
-    print("\(stamp) \(message)")
+    let line = "\(ISO8601DateFormatter().string(from: Date())) \(message)\n"
+    guard logToFile else {
+        print(line, terminator: "")
+        return
+    }
+    // 每写一行都重新打开文件：清理类软件会删掉 /var/log 下的文件，这样删了也能自己重建。
+    var info = stat()
+    if stat(logFile, &info) == 0, info.st_size > 1_000_000 {
+        rename(logFile, logFile + ".1")
+    }
+    let fd = open(logFile, O_WRONLY | O_APPEND | O_CREAT, 0o644)
+    guard fd >= 0 else { return }
+    _ = line.withCString { write(fd, $0, strlen($0)) }
+    close(fd)
 }
 
 func onACPower() -> Bool {
+    if let simulatedPower { return simulatedPower == "ac" }
     let info = IOPSCopyPowerSourcesInfo().takeRetainedValue()
     let type = IOPSGetProvidingPowerSourceType(info).takeUnretainedValue() as String
     return type == kIOPSACPowerValue
+}
+
+func batteryPercent() -> Int? {
+    if let simulatedBattery { return simulatedBattery }
+    let info = IOPSCopyPowerSourcesInfo().takeRetainedValue()
+    for source in IOPSCopyPowerSourcesList(info).takeRetainedValue() as [CFTypeRef] {
+        guard let desc = IOPSGetPowerSourceDescription(info, source)?.takeUnretainedValue() as? [String: Any],
+              desc[kIOPSTypeKey] as? String == kIOPSInternalBatteryType,
+              let percent = desc[kIOPSCurrentCapacityKey] as? Int else { continue }
+        return percent
+    }
+    return nil
 }
 
 func rootDomainFlag(_ key: String) -> Bool {
@@ -90,10 +126,29 @@ func pmset(_ args: [String]) -> Bool {
     return true
 }
 
+// 「始终开启」时用电池硬撑，电量降到 10% 就放行睡眠，免得直接断电。回到 15% 以上或接上电源后恢复。
+func updateLowBattery() {
+    let was = State.lowBattery
+    if State.mode == .on, !onACPower(), let percent = batteryPercent() {
+        if percent <= 10 {
+            State.lowBattery = true
+        } else if percent >= 15 {
+            State.lowBattery = false
+        }
+    } else {
+        State.lowBattery = false
+    }
+    // 是切换模式导致的解除就不用记了，模式切换本身已经有一行日志。
+    guard State.lowBattery != was, State.mode == .on else { return }
+    log(State.lowBattery
+        ? L("电量降到 10%，暂时放行睡眠，免得直接断电", "Battery at 10%: allowing sleep for now to avoid a hard power-off")
+        : L("电量或供电已恢复，低电量保护解除", "Battery or power is back: low-battery protection lifted"))
+}
+
 func wantsMacMiniMode() -> Bool {
     switch State.mode {
     case .auto: return onACPower()
-    case .on: return true
+    case .on: return !State.lowBattery
     case .off: return false
     }
 }
@@ -118,6 +173,7 @@ func holdAssertion(_ on: Bool) {
 }
 
 func sync() {
+    updateLowBattery()
     let want = wantsMacMiniMode()
     holdAssertion(want)
     // 以系统里的真实值为准，别的工具或手动 pmset 改掉了也要纠正回来。
@@ -142,15 +198,21 @@ func sync() {
     if overridden {
         // 有的机器上每隔几分钟就会被改一次，只记前几次和之后每 50 次，免得日志刷屏。
         State.overrides += 1
+        notify_set_state(State.overridesToken, UInt64(State.overrides))
         if State.overrides <= 3 || State.overrides % 50 == 0 {
             log(L("睡眠设置被其他程序改动，已恢复为 disablesleep \(want ? 1 : 0)（第 \(State.overrides) 次）",
                   "Sleep setting was changed by another program; restored disablesleep \(want ? 1 : 0) (#\(State.overrides))"))
         }
         return
     }
-    let reason = State.mode == .auto
-        ? (want ? L("接入电源", "On AC power") : L("使用电池", "On battery"))
-        : State.mode.label
+    let reason: String
+    if State.mode == .auto {
+        reason = want ? L("接入电源", "On AC power") : L("使用电池", "On battery")
+    } else if State.mode == .on, State.lowBattery {
+        reason = L("电量不足", "Battery low")
+    } else {
+        reason = State.mode.label
+    }
     let outcome = want
         ? L("Mac mini 模式开启 (disablesleep 1)", "Mac mini mode on (disablesleep 1)")
         : L("Mac mini 模式关闭 (disablesleep 0)", "Mac mini mode off (disablesleep 0)")
@@ -217,6 +279,9 @@ if !dryRun,
 }
 
 notify_register_check("\(notifyPrefix).state", &State.stateToken)
+// 菜单栏的体检窗口从这里读「被其他程序改动了多少次」。
+notify_register_check("\(notifyPrefix).overrides", &State.overridesToken)
+notify_set_state(State.overridesToken, 0)
 var commandTokens: [Int32] = []
 for mode in Mode.allCases {
     var token: Int32 = 0
@@ -238,6 +303,21 @@ let timer = DispatchSource.makeTimerSource(queue: .main)
 timer.schedule(deadline: .now() + 5, repeating: 5)
 timer.setEventHandler { sync() }
 timer.resume()
+
+// 只记录，不据此自动睡眠：过热保护交给系统自己，这里留痕方便事后排查。
+var thermalWasHigh = false
+NotificationCenter.default.addObserver(forName: ProcessInfo.thermalStateDidChangeNotification, object: nil, queue: .main) { _ in
+    let state = ProcessInfo.processInfo.thermalState
+    let high = state == .serious || state == .critical
+    if high {
+        log(state == .critical
+            ? L("机器温度过高（危险级别）", "Thermal state: critical")
+            : L("机器温度偏高", "Thermal state: serious"))
+    } else if thermalWasHigh {
+        log(L("机器温度恢复正常", "Thermal state back to normal"))
+    }
+    thermalWasHigh = high
+}
 
 log(L("macmini-moded 启动", "macmini-moded started") + (dryRun ? " (dry-run)" : "")
     + L("，模式：", ", mode: ") + State.mode.label)

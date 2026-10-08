@@ -4,6 +4,14 @@
 CONSOLE_UID=$(stat -f %u /dev/console)
 
 launchctl bootstrap system /Library/LaunchDaemons/com.macminimode.daemon.plist
+
+# 命令行入口。用软链接而不是把文件装进 /usr/local/bin，免得安装器改动那个目录的权限。
+# 那里已经有一个不是我们的同名文件时不去碰它。
+CLI=/usr/local/bin/macminimode
+mkdir -p /usr/local/bin
+if [ -L "$CLI" ] || [ ! -e "$CLI" ]; then
+    ln -sf /Applications/MacMiniMode.app/Contents/Resources/macminimode "$CLI"
+fi
 if [ "$CONSOLE_UID" != "0" ]; then
     launchctl bootstrap "gui/$CONSOLE_UID" /Library/LaunchAgents/com.macminimode.menubar.plist
 fi

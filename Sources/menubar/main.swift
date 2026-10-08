@@ -1,5 +1,5 @@
 // macmini-menubar — 菜单栏图标，显示 Mac mini 模式当前状态，并可手动切换模式（不需要 root）。
-// 检查更新的逻辑在 Updater.swift。
+// 检查更新的逻辑在 Updater.swift，体检窗口在 Health.swift。
 // 切换通过 Darwin 通知发给 macmini-moded，由它去改系统设置。
 
 import AppKit
@@ -66,6 +66,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     let daemonItem = NSMenuItem(title: "", action: nil, keyEquivalent: "")
     var switchItems: [NSMenuItem] = []
     let updater = Updater()
+    let health = HealthWindowController()
     let installItem = NSMenuItem(title: "", action: #selector(installUpdate), keyEquivalent: "")
     let autoCheckItem = NSMenuItem(title: L("自动检查更新", "Check for Updates Automatically"), action: #selector(toggleAutoCheck), keyEquivalent: "")
     var stateToken: Int32 = 0
@@ -88,6 +89,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             menu.addItem(item)
         }
         menu.addItem(.separator())
+        let healthItem = NSMenuItem(title: L("体检…", "Health Check…"), action: #selector(openHealth), keyEquivalent: "")
+        healthItem.target = self
+        menu.addItem(healthItem)
         let logItem = NSMenuItem(title: L("查看日志", "View Log"), action: #selector(openLog), keyEquivalent: "l")
         logItem.target = self
         menu.addItem(logItem)
@@ -106,6 +110,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
         updater.onChange = { [weak self] in self?.refresh() }
         updater.start()
+        if CommandLine.arguments.contains("--health-check") { health.show() }
 
         notify_register_dispatch("\(notifyPrefix).state", &stateToken, .main) { [weak self] _ in
             self?.refreshSoon()
@@ -178,9 +183,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         notify_post("\(notifyPrefix).set-\(modes[sender.tag].name)")
     }
 
+    @objc func openHealth() {
+        health.show()
+    }
+
     @objc func openLog() {
         NSWorkspace.shared.open(URL(fileURLWithPath: logPath))
     }
+}
+
+// 命令行的 `macminimode check` 走这里：把体检结果和诊断信息打印出来就退出，不启动界面。
+if CommandLine.arguments.contains("--print-diagnostics") {
+    print(Health.report(Health.run()))
+    exit(0)
 }
 
 let app = NSApplication.shared

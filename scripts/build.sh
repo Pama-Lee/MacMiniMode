@@ -42,7 +42,7 @@ compile Sources/menubar "$APP/Contents/MacOS/MacMiniMode"
 
 sed "s/@VERSION@/$VERSION/g" Resources/Info.plist > "$APP/Contents/Info.plist"
 cp Resources/AppIcon.icns "$APP/Contents/Resources/"
-install -m 755 scripts/uninstall.sh "$APP/Contents/Resources/"
+install -m 755 scripts/uninstall.sh Resources/macminimode "$APP/Contents/Resources/"
 install -m 644 Resources/com.macminimode.daemon.plist "$ROOT/Library/LaunchDaemons/"
 install -m 644 Resources/com.macminimode.menubar.plist "$ROOT/Library/LaunchAgents/"
 
