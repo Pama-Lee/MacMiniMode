@@ -1,4 +1,5 @@
 // macmini-menubar — 菜单栏图标，显示 Mac mini 模式当前状态，并可手动切换模式（不需要 root）。
+// 检查更新的逻辑在 Updater.swift。
 // 切换通过 Darwin 通知发给 macmini-moded，由它去改系统设置。
 
 import AppKit
@@ -64,6 +65,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     let powerItem = NSMenuItem(title: "", action: nil, keyEquivalent: "")
     let daemonItem = NSMenuItem(title: "", action: nil, keyEquivalent: "")
     var switchItems: [NSMenuItem] = []
+    let updater = Updater()
+    let installItem = NSMenuItem(title: "", action: #selector(installUpdate), keyEquivalent: "")
+    let autoCheckItem = NSMenuItem(title: L("自动检查更新", "Check for Updates Automatically"), action: #selector(toggleAutoCheck), keyEquivalent: "")
     var stateToken: Int32 = 0
     var timer: Timer?
 
@@ -87,8 +91,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let logItem = NSMenuItem(title: L("查看日志", "View Log"), action: #selector(openLog), keyEquivalent: "l")
         logItem.target = self
         menu.addItem(logItem)
+        menu.addItem(.separator())
+        installItem.target = self
+        installItem.isHidden = true
+        menu.addItem(installItem)
+        let checkItem = NSMenuItem(title: L("检查更新…", "Check for Updates…"), action: #selector(checkForUpdates), keyEquivalent: "")
+        checkItem.target = self
+        menu.addItem(checkItem)
+        autoCheckItem.target = self
+        menu.addItem(autoCheckItem)
+        menu.addItem(.separator())
         menu.addItem(NSMenuItem(title: L("退出", "Quit"), action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
         statusItem.menu = menu
+
+        updater.onChange = { [weak self] in self?.refresh() }
+        updater.start()
 
         notify_register_dispatch("\(notifyPrefix).state", &stateToken, .main) { [weak self] _ in
             self?.refreshSoon()
@@ -137,6 +154,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             item.isEnabled = running
             item.state = running && item.tag == Int(rawMode) ? .on : .off
         }
+        installItem.isHidden = updater.ready == nil
+        if let ready = updater.ready {
+            installItem.title = L("安装新版本 \(ready.version)…", "Install Version \(ready.version)…")
+        }
+        autoCheckItem.state = updater.autoCheck ? .on : .off
+    }
+
+    @objc func checkForUpdates() {
+        updater.check(manual: true)
+    }
+
+    @objc func installUpdate() {
+        updater.installReady()
+    }
+
+    @objc func toggleAutoCheck() {
+        updater.autoCheck.toggle()
+        refresh()
     }
 
     @objc func selectMode(_ sender: NSMenuItem) {

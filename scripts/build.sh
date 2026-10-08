@@ -27,7 +27,7 @@ compile() {
     local source=$1 output=$2 name
     name=$(basename "$output")
     for arch in arm64 x86_64; do
-        swiftc -O -target "$arch-apple-macos$MIN_OS" "$source" -o "$BUILD/obj/$name-$arch"
+        swiftc -O -target "$arch-apple-macos$MIN_OS" "$source"/*.swift -o "$BUILD/obj/$name-$arch"
     done
     lipo -create "$BUILD/obj/$name-arm64" "$BUILD/obj/$name-x86_64" -output "$output"
 }
@@ -37,8 +37,8 @@ rm -rf "$BUILD"
 mkdir -p "$BUILD/obj" "$APP/Contents/MacOS" "$APP/Contents/Resources" \
     "$(dirname "$DAEMON")" "$ROOT/Library/LaunchDaemons" "$ROOT/Library/LaunchAgents"
 
-compile Sources/daemon/main.swift "$DAEMON"
-compile Sources/menubar/main.swift "$APP/Contents/MacOS/MacMiniMode"
+compile Sources/daemon "$DAEMON"
+compile Sources/menubar "$APP/Contents/MacOS/MacMiniMode"
 
 sed "s/@VERSION@/$VERSION/g" Resources/Info.plist > "$APP/Contents/Info.plist"
 cp Resources/AppIcon.icns "$APP/Contents/Resources/"
