@@ -33,6 +33,7 @@ Mac mini Mode turns a MacBook into an always-on home server or headless Mac. It 
 - **On when plugged in**: sleep is disabled on AC power, so your Mac keeps running with the lid closed and no display attached.
 - **Off when unplugged**: normal sleep returns on battery. If the lid is already closed, the Mac sleeps right away.
 - **Menu bar control**: switch between Automatic, Always On and Always Off, and see the current state at a glance.
+- **Quit and Allow Sleep**: choosing Quit switches to Always Off and waits until sleep is allowed. The setting stays off after reconnecting power or restarting; choose Automatic or Always On to enable it again. Logging out, restarting or shutting down macOS preserves the selected mode. Other power settings are unchanged.
 - **Health Check**: one click checks whether Remote Login, Screen Sharing, the battery and power settings are ready, and copies diagnostics for bug reports.
 - **Low-battery protection**: in Always On on battery, sleep is allowed again at 10% so the Mac never runs itself flat.
 - **Command line**: `macminimode status` and `macminimode on|off|auto`, also usable from Shortcuts with Run Shell Script.

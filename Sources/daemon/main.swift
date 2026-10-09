@@ -167,7 +167,11 @@ func holdAssertion(_ on: Bool) {
             log(L("创建防睡眠断言失败", "Could not create the sleep assertion") + " (\(result))")
         }
     } else if !on, State.assertion != 0 {
-        IOPMAssertionRelease(State.assertion)
+        let result = IOPMAssertionRelease(State.assertion)
+        guard result == kIOReturnSuccess else {
+            log(L("释放防睡眠断言失败", "Could not release the sleep assertion") + " (\(result))")
+            return
+        }
         State.assertion = 0
     }
 }
@@ -237,9 +241,12 @@ func publishMode() {
 }
 
 func setMode(_ mode: Mode) {
-    guard mode != State.mode else { return }
+    // 退出时会再次请求关闭；即使模式已经是 off，也重试保存和应用，修复先前的失败。
+    guard mode != State.mode || mode == .off else { return }
+    if mode != State.mode {
+        log(L("模式切换为：", "Mode set to: ") + mode.label)
+    }
     State.mode = mode
-    log(L("模式切换为：", "Mode set to: ") + mode.label)
     if !dryRun {
         do {
             try mode.name.write(toFile: modeFile, atomically: true, encoding: .utf8)
