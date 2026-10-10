@@ -20,7 +20,8 @@ struct QuitControllerTests {
             eventID: AEEventID(kAEQuitApplication), targetDescriptor: nil,
             returnID: AEReturnID(kAutoGenerateReturnID), transactionID: AETransactionID(kAnyTransactionID))
         precondition(!QuitPolicy.isSystemQuit(event), "A normal app quit must stop the policy")
-        for reason in [kAEQuitAll, kAEShutDown, kAERestart, kAEReallyLogOut] {
+        for reason in [kAEQuitAll, kAELogOut, kAEReallyLogOut, kAEShowRestartDialog, kAERestart,
+                       kAEShowShutdownDialog, kAEShutDown] {
             event.setParam(NSAppleEventDescriptor(enumCode: OSType(reason)), forKeyword: AEKeyword(kAEQuitReason))
             precondition(QuitPolicy.isSystemQuit(event), "System termination must preserve the selected mode")
         }

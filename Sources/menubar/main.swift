@@ -71,6 +71,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     let autoCheckItem = NSMenuItem(title: L("自动检查更新", "Check for Updates Automatically"), action: #selector(toggleAutoCheck), keyEquivalent: "")
     var stateToken: Int32 = 0
     var timer: Timer?
+    // 只有点了菜单里的「退出并恢复睡眠」才算用户主动退出。其他途径的退出（系统注销、重启、
+    // 活动监视器、脚本）一律不改模式：把后台服务永久切到关闭必须是明确的用户操作。
+    private var userRequestedQuit = false
     @MainActor private lazy var quitController = QuitController(
         requestStop: { notify_post("\(notifyPrefix).set-off") },
         hasStopped: { QuitPolicy.isStopped(prefix: notifyPrefix) })
@@ -109,7 +112,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         menu.addItem(autoCheckItem)
         menu.addItem(.separator())
         let quitItem = NSMenuItem(title: L("退出并恢复睡眠", "Quit and Allow Sleep"),
-                                 action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
+                                 action: #selector(quitAndAllowSleep), keyEquivalent: "q")
+        quitItem.target = self
         quitItem.toolTip = L("退出后不再防止 Mac 休眠。", "Quitting stops Mac mini Mode from preventing sleep.")
         menu.addItem(quitItem)
         statusItem.menu = menu
@@ -139,10 +143,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         // 系统退出不等于用户主动关闭 App，不能在重启或注销时永久关闭自动模式。
-        if QuitPolicy.isSystemQuit(NSAppleEventManager.shared().currentAppleEvent) { return .terminateNow }
+        guard userRequestedQuit,
+              !QuitPolicy.isSystemQuit(NSAppleEventManager.shared().currentAppleEvent) else { return .terminateNow }
         quitController.begin { [weak self] stopped in
             sender.reply(toApplicationShouldTerminate: stopped)
             guard !stopped else { return }
+            self?.userRequestedQuit = false
             self?.refresh()
             let alert = NSAlert()
             alert.alertStyle = .warning
@@ -207,6 +213,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     @objc func selectMode(_ sender: NSMenuItem) {
         notify_post("\(notifyPrefix).set-\(modes[sender.tag].name)")
+    }
+
+    @objc func quitAndAllowSleep() {
+        userRequestedQuit = true
+        NSApp.terminate(nil)
     }
 
     @objc func openHealth() {

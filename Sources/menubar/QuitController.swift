@@ -50,7 +50,8 @@ enum QuitPolicy {
     static func isSystemQuit(_ event: NSAppleEventDescriptor?) -> Bool {
         guard event?.eventID == kAEQuitApplication,
               let reason = event?.paramDescriptor(forKeyword: AEKeyword(kAEQuitReason))?.enumCodeValue else { return false }
-        return [kAEQuitAll, kAEShutDown, kAERestart, kAEReallyLogOut].contains(reason)
+        return [kAEQuitAll, kAELogOut, kAEReallyLogOut, kAEShowRestartDialog, kAERestart,
+                kAEShowShutdownDialog, kAEShutDown].contains(reason)
     }
 
     static func isStopped(prefix: String) -> Bool {
