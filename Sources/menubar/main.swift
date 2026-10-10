@@ -71,6 +71,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     let autoCheckItem = NSMenuItem(title: L("自动检查更新", "Check for Updates Automatically"), action: #selector(toggleAutoCheck), keyEquivalent: "")
     var stateToken: Int32 = 0
     var timer: Timer?
+    @MainActor private lazy var quitController = QuitController(
+        requestStop: { notify_post("\(notifyPrefix).set-off") },
+        hasStopped: { QuitPolicy.isStopped(prefix: notifyPrefix) })
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         let menu = NSMenu()
@@ -105,7 +108,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         autoCheckItem.target = self
         menu.addItem(autoCheckItem)
         menu.addItem(.separator())
-        menu.addItem(NSMenuItem(title: L("退出", "Quit"), action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
+        let quitItem = NSMenuItem(title: L("退出并恢复睡眠", "Quit and Allow Sleep"),
+                                 action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
+        quitItem.toolTip = L("退出后不再防止 Mac 休眠。", "Quitting stops Mac mini Mode from preventing sleep.")
+        menu.addItem(quitItem)
         statusItem.menu = menu
 
         updater.onChange = { [weak self] in self?.refresh() }
@@ -129,6 +135,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     func menuWillOpen(_ menu: NSMenu) {
         refresh()
+    }
+
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        // 系统退出不等于用户主动关闭 App，不能在重启或注销时永久关闭自动模式。
+        if QuitPolicy.isSystemQuit(NSAppleEventManager.shared().currentAppleEvent) { return .terminateNow }
+        quitController.begin { [weak self] stopped in
+            sender.reply(toApplicationShouldTerminate: stopped)
+            guard !stopped else { return }
+            self?.refresh()
+            let alert = NSAlert()
+            alert.alertStyle = .warning
+            alert.messageText = L("未能确认防休眠已关闭", "Could Not Confirm Sleep Is Allowed")
+            alert.informativeText = L(
+                "App 尚未退出。请查看「体检」或日志，解决问题后再退出。",
+                "The app is still running. Check Health Check or View Log, then try quitting again.")
+            alert.addButton(withTitle: L("好", "OK"))
+            NSApp.activate(ignoringOtherApps: true)
+            alert.runModal()
+        }
+        return .terminateLater
     }
 
     // 守护进程收到通知后才去改设置，立即读一次，稍等再读一次。
