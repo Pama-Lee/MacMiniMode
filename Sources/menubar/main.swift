@@ -69,6 +69,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     let health = HealthWindowController()
     let installItem = NSMenuItem(title: "", action: #selector(installUpdate), keyEquivalent: "")
     let autoCheckItem = NSMenuItem(title: L("自动检查更新", "Check for Updates Automatically"), action: #selector(toggleAutoCheck), keyEquivalent: "")
+    let lidLockMenu = LidLockMenu()
     var stateToken: Int32 = 0
     var timer: Timer?
     // 只有点了菜单里的「退出并恢复睡眠」才算用户主动退出。其他途径的退出（系统注销、重启、
@@ -94,6 +95,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             switchItems.append(item)
             menu.addItem(item)
         }
+        lidLockMenu.add(to: menu)
         menu.addItem(.separator())
         let healthItem = NSMenuItem(title: L("体检…", "Health Check…"), action: #selector(openHealth), keyEquivalent: "")
         healthItem.target = self
@@ -117,6 +119,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         quitItem.toolTip = L("退出后不再防止 Mac 休眠。", "Quitting stops Mac mini Mode from preventing sleep.")
         menu.addItem(quitItem)
         statusItem.menu = menu
+
+        lidLockMenu.start()
 
         updater.onChange = { [weak self] in self?.refresh() }
         updater.start()
@@ -196,6 +200,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             installItem.title = L("安装新版本 \(ready.version)…", "Install Version \(ready.version)…")
         }
         autoCheckItem.state = updater.autoCheck ? .on : .off
+        lidLockMenu.refresh()
     }
 
     @objc func checkForUpdates() {

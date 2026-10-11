@@ -33,6 +33,7 @@ Mac mini Mode turns a MacBook into an always-on home server or headless Mac. It 
 - **On when plugged in**: sleep is disabled on AC power, so your Mac keeps running with the lid closed and no display attached.
 - **Off when unplugged**: normal sleep returns on battery. If the lid is already closed, the Mac sleeps right away.
 - **Menu bar control**: switch between Automatic, Always On and Always Off, and see the current state at a glance.
+- **Optional lock on lid opening**: enable **Lock When Lid Opens** to lock your session when a closed MacBook is reopened. Closing the lid does not lock it, and the keep-awake mode stays unchanged.
 - **Quit and Allow Sleep**: choosing Quit switches to Always Off and waits until sleep is allowed. The setting stays off after reconnecting power or restarting; choose Automatic or Always On to enable it again. Logging out, restarting or shutting down macOS preserves the selected mode. Other power settings are unchanged.
 - **Health Check**: one click checks whether Remote Login, Screen Sharing, the battery and power settings are ready, and copies diagnostics for bug reports.
 - **Low-battery protection**: in Always On on battery, sleep is allowed again at 10% so the Mac never runs itself flat.
@@ -43,6 +44,12 @@ Mac mini Mode turns a MacBook into an always-on home server or headless Mac. It 
 Once a day the app asks GitHub whether a newer version exists. If so it downloads the installer, verifies its signature, and asks before installing; Install opens the system installer. To turn this off, uncheck **Check for Updates Automatically** in the menu and use **Check for Updates…** when you want.
 
 ## Troubleshooting
+
+**Lock When Lid Opens** is off by default and requires the menu bar app to remain running. It observes a closed-to-open transition, not an already-open lid at startup. It uses the system's immediate lock operation, not a screensaver or a change to your password settings. Locking can affect remote desktop or software that requires an unlocked session.
+
+macOS delivers lid events asynchronously, so the desktop may be briefly visible before the lock takes effect; this is not a guarantee that the first visible frame is locked. For that guarantee, lock the Mac manually before leaving.
+
+The menu shows a warning if monitoring or lock confirmation fails. Screen locking uses a private macOS interface checked at runtime; if unavailable, the option cannot be enabled. Native desktop Macs without a lid are unsupported.
 
 Update to the latest version first. If your Mac still sleeps with the lid closed, choose **Health Check…** from the menu bar icon, click **Copy Diagnostics**, and paste it in [Issues](../../issues). A common cause is remote desktop or cleaner software that rewrites power settings on a timer; the app now restores the setting right away and notes it in the log.
 
