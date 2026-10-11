@@ -1,5 +1,5 @@
 // macmini-menubar — 菜单栏图标，显示 Mac mini 模式当前状态，并可手动切换模式（不需要 root）。
-// 检查更新的逻辑在 Updater.swift，体检窗口在 Health.swift。
+// 检查更新的逻辑在 Updater.swift，体检窗口在 Health.swift，合盖熄屏在 LidScreen.swift。
 // 切换通过 Darwin 通知发给 macmini-moded，由它去改系统设置。
 
 import AppKit
@@ -67,10 +67,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     var switchItems: [NSMenuItem] = []
     let updater = Updater()
     let health = HealthWindowController()
+    let lidScreen = LidScreen()
+    let lidScreenItem = NSMenuItem(title: L("合盖时熄灭屏幕", "Turn Off Screen When Lid Is Closed"), action: #selector(toggleLidScreen), keyEquivalent: "")
     let installItem = NSMenuItem(title: "", action: #selector(installUpdate), keyEquivalent: "")
     let autoCheckItem = NSMenuItem(title: L("自动检查更新", "Check for Updates Automatically"), action: #selector(toggleAutoCheck), keyEquivalent: "")
     var stateToken: Int32 = 0
     var timer: Timer?
+    var lidTimer: Timer?
+    let termSource = DispatchSource.makeSignalSource(signal: SIGTERM, queue: .main)
     // 只有点了菜单里的「退出并恢复睡眠」才算用户主动退出。其他途径的退出（系统注销、重启、
     // 活动监视器、脚本）一律不改模式：把后台服务永久切到关闭必须是明确的用户操作。
     private var userRequestedQuit = false
@@ -94,6 +98,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             switchItems.append(item)
             menu.addItem(item)
         }
+        lidScreenItem.target = self
+        lidScreenItem.toolTip = L("只关背光，不锁屏。万一开盖后屏幕还是黑的，按键盘上的亮度增加键（F2）即可。",
+                                  "Only the backlight is switched off; the Mac does not lock. If the screen is still dark after opening the lid, press the brightness-up key (F2).")
+        menu.addItem(lidScreenItem)
         menu.addItem(.separator())
         let healthItem = NSMenuItem(title: L("体检…", "Health Check…"), action: #selector(openHealth), keyEquivalent: "")
         healthItem.target = self
@@ -134,11 +142,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             CFRunLoopAddSource(CFRunLoopGetMain(), source, .commonModes)
         }
         timer = Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { [weak self] _ in self?.refresh() }
+        // 合盖要尽快反应，单独每秒看一次盖子；只读一个系统属性，开销可以忽略。
+        lidTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
+            self?.lidScreen.tick(modeOn: rootDomainFlag("SleepDisabled"), lidClosed: rootDomainFlag("AppleClamshellState"))
+        }
+        // 上次如果没来得及恢复亮度（比如被强制结束），启动时补上。
+        if !rootDomainFlag("AppleClamshellState") { lidScreen.restore() }
+        // 安装器升级时会用信号结束这个进程，退出前先把亮度还回去。
+        signal(SIGTERM, SIG_IGN)
+        termSource.setEventHandler { [weak self] in
+            self?.lidScreen.restore()
+            exit(0)
+        }
+        termSource.resume()
         refresh()
     }
 
     func menuWillOpen(_ menu: NSMenu) {
         refresh()
+    }
+
+    func applicationWillTerminate(_ notification: Notification) {
+        lidScreen.restore()
     }
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
@@ -196,6 +221,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             installItem.title = L("安装新版本 \(ready.version)…", "Install Version \(ready.version)…")
         }
         autoCheckItem.state = updater.autoCheck ? .on : .off
+        lidScreenItem.state = lidScreen.enabled ? .on : .off
+    }
+
+    @objc func toggleLidScreen() {
+        lidScreen.enabled.toggle()
+        refresh()
     }
 
     @objc func checkForUpdates() {
@@ -227,6 +258,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     @objc func openLog() {
         NSWorkspace.shared.open(URL(fileURLWithPath: logPath))
     }
+}
+
+// 命令行的 `macminimode screen-on` 走这里：开盖后屏幕万一还是黑的，可以远程执行把背光打开。
+if CommandLine.arguments.contains("--screen-on") {
+    exit(LidScreen().forceOn() ? 0 : 1)
 }
 
 // 命令行的 `macminimode check` 走这里：把体检结果和诊断信息打印出来就退出，不启动界面。

@@ -34,6 +34,7 @@ Mac mini Mode turns a MacBook into an always-on home server or headless Mac. It 
 - **Off when unplugged**: normal sleep returns on battery. If the lid is already closed, the Mac sleeps right away.
 - **Menu bar control**: switch between Automatic, Always On and Always Off, and see the current state at a glance.
 - **Quit and Allow Sleep**: choosing Quit switches to Always Off and waits until sleep is allowed. The setting stays off after reconnecting power or restarting; choose Automatic or Always On to enable it again. Logging out, restarting or shutting down macOS preserves the selected mode. Other power settings are unchanged.
+- **Screen off with the lid closed**: the built-in display's backlight turns off when you close the lid and returns to its previous brightness when you open it. Only the backlight changes, so the Mac does not lock and remote desktop or running apps are not interrupted. It never touches an external display. Can be switched off in the menu.
 - **Health Check**: one click checks whether Remote Login, Screen Sharing, the battery and power settings are ready, and copies diagnostics for bug reports.
 - **Low-battery protection**: in Always On on battery, sleep is allowed again at 10% so the Mac never runs itself flat.
 - **Command line**: `macminimode status` and `macminimode on|off|auto`, also usable from Shortcuts with Run Shell Script.
@@ -45,6 +46,8 @@ Once a day the app asks GitHub whether a newer version exists. If so it download
 ## Troubleshooting
 
 Update to the latest version first. If your Mac still sleeps with the lid closed, choose **Health Check…** from the menu bar icon, click **Copy Diagnostics**, and paste it in [Issues](../../issues). A common cause is remote desktop or cleaner software that rewrites power settings on a timer; the app now restores the setting right away and notes it in the log.
+
+If the screen is still dark after you open the lid (rare, for example if the app was force-quit while the lid was closed), press the brightness-up key (F2). Over a remote connection you can also run `macminimode screen-on`.
 
 ## Uninstall
 

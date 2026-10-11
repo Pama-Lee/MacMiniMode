@@ -4,6 +4,7 @@
 #   macminimode auto|on|off  切换模式 / switch mode
 #   macminimode log [N]    最近 N 行日志 / last N log lines
 #   macminimode check      体检并输出诊断信息 / health check and diagnostics
+#   macminimode screen-on  开盖后屏幕仍是黑的时，把背光打开 / turn the backlight back on
 # 快捷指令里用「运行 Shell 脚本」调用即可。In Shortcuts, call it from "Run Shell Script".
 
 PREFIX=${MACMINIMODE_PREFIX:-com.macminimode}
@@ -42,8 +43,16 @@ case "${1:-status}" in
         ;;
     log) /usr/bin/tail -n "${2:-30}" "$LOG" ;;
     check) "$APP/Contents/MacOS/MacMiniMode" --print-diagnostics ;;
+    screen-on)
+        if "$APP/Contents/MacOS/MacMiniMode" --screen-on; then
+            echo "屏幕背光已打开 / Backlight is on"
+        else
+            echo "没能打开背光，请按键盘上的亮度增加键（F2）/ Could not set the backlight; press the brightness-up key (F2)" >&2
+            exit 1
+        fi
+        ;;
     *)
-        echo "用法 Usage: macminimode [status|auto|on|off|log [N]|check]" >&2
+        echo "用法 Usage: macminimode [status|auto|on|off|log [N]|check|screen-on]" >&2
         exit 2
         ;;
 esac
