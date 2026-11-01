@@ -4,5 +4,5 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 TEST_BUILD=$(mktemp -d "${TMPDIR:-/tmp}/macminimode-quit-tests.XXXXXX")
 trap 'rm -rf "$TEST_BUILD"' EXIT
-swiftc Sources/menubar/QuitController.swift Tests/QuitControllerTests.swift -o "$TEST_BUILD/test-quit"
+swiftc Sources/shared/*.swift Sources/menubar/QuitController.swift Tests/QuitControllerTests.swift -o "$TEST_BUILD/test-quit"
 "$TEST_BUILD/test-quit"

@@ -31,15 +31,12 @@ status() {
 }
 
 case "${1:-status}" in
-    status) status ;;
+    status)
+        if [ "${2:-}" = "--json" ]; then exec "$APP/Contents/MacOS/macminimode-control" status; fi
+        status ;;
+    task) shift; exec "$APP/Contents/MacOS/macminimode-control" "$@" ;;
     auto|on|off)
-        if ! /usr/bin/pgrep -x macmini-moded >/dev/null; then
-            echo "后台服务未运行，无法切换 / The background service is not running" >&2
-            exit 1
-        fi
-        /usr/bin/notifyutil -p "$PREFIX.set-$1"
-        sleep 1
-        status
+        "$APP/Contents/MacOS/macminimode-control" "$1" || exit $?
         ;;
     log) /usr/bin/tail -n "${2:-30}" "$LOG" ;;
     check) "$APP/Contents/MacOS/MacMiniMode" --print-diagnostics ;;

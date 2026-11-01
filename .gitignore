@@ -1,2 +1,6 @@
 build/
 .DS_Store
+
+work/
+MCP/.build/
+__pycache__/

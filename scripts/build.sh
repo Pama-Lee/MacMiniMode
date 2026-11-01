@@ -22,23 +22,29 @@ find_identity() {
 APP_IDENTITY=${APP_IDENTITY:-$(find_identity "Developer ID Application")}
 PKG_IDENTITY=${PKG_IDENTITY:-$(find_identity "Developer ID Installer")}
 NOTARY_PROFILE=${NOTARY_PROFILE:-}
+if [ "${LOCAL_PREVIEW:-0}" = "1" ]; then
+    APP_IDENTITY=""
+    PKG_IDENTITY=""
+    NOTARY_PROFILE=""
+fi
 
 compile() {
     local source=$1 output=$2 name
     name=$(basename "$output")
     for arch in arm64 x86_64; do
-        swiftc -O -target "$arch-apple-macos$MIN_OS" "$source"/*.swift -o "$BUILD/obj/$name-$arch"
+        swiftc -O -target "$arch-apple-macos$MIN_OS" Sources/shared/*.swift "$source"/*.swift -o "$BUILD/obj/$name-$arch"
     done
     lipo -create "$BUILD/obj/$name-arm64" "$BUILD/obj/$name-x86_64" -output "$output"
 }
 
-echo "==> 编译 $VERSION（arm64 + x86_64）"
+echo "==> 编译 ${VERSION}（arm64 + x86_64）"
 rm -rf "$BUILD"
 mkdir -p "$BUILD/obj" "$APP/Contents/MacOS" "$APP/Contents/Resources" \
     "$(dirname "$DAEMON")" "$ROOT/Library/LaunchDaemons" "$ROOT/Library/LaunchAgents"
 
 compile Sources/daemon "$DAEMON"
 compile Sources/menubar "$APP/Contents/MacOS/MacMiniMode"
+compile Sources/control "$APP/Contents/MacOS/macminimode-control"
 
 sed "s/@VERSION@/$VERSION/g" Resources/Info.plist > "$APP/Contents/Info.plist"
 cp Resources/AppIcon.icns "$APP/Contents/Resources/"
@@ -55,12 +61,14 @@ else
     SIGN=(codesign --force --sign -)
 fi
 "${SIGN[@]}" --identifier com.macminimode.daemon "$DAEMON"
+"${SIGN[@]}" "$APP/Contents/MacOS/macminimode-control"
 "${SIGN[@]}" "$APP"
 
 echo "==> 打包"
 # 不关掉 relocatable 的话，安装器会把应用装到它在磁盘上找到的同名副本那里。
 pkgbuild --analyze --root "$ROOT" "$BUILD/component.plist" >/dev/null
-/usr/libexec/PlistBuddy -c "Set :0:BundleIsRelocatable false" "$BUILD/component.plist"
+/usr/libexec/PlistBuddy -c "Set :0:BundleIsRelocatable false" "$BUILD/component.plist" 2>/dev/null || \
+    /usr/libexec/PlistBuddy -c "Add :0:BundleIsRelocatable bool false" "$BUILD/component.plist"
 pkgbuild --root "$ROOT" \
     --component-plist "$BUILD/component.plist" \
     --scripts Installer/scripts \

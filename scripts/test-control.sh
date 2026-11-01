@@ -1,0 +1,9 @@
+#!/bin/bash
+set -euo pipefail
+cd "$(dirname "$0")/.."
+mkdir -p work/tests
+swiftc Sources/shared/ControlModel.swift Tests/ControlPolicyTests.swift -o work/tests/policy-tests
+work/tests/policy-tests
+swiftc Sources/shared/*.swift Sources/daemon/*.swift -o work/tests/macmini-moded
+swiftc Sources/shared/*.swift Sources/control/*.swift -o work/tests/macminimode-control
+python3 Tests/control_integration.py
