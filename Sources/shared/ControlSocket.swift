@@ -40,12 +40,25 @@ enum ControlSocket {
         }
     }
     static func read(_ fd: Int32) throws -> Data {
+        let deadline = DispatchTime.now().uptimeNanoseconds + 5_000_000_000
         var data = Data()
         var buffer = [UInt8](repeating: 0, count: 4096)
         while data.count <= 1048576 {
+            // Bound the whole message, including clients that keep sending partial data.
+            let now = DispatchTime.now().uptimeNanoseconds
+            guard now < deadline else { throw ControlFailure("socket_read_failed_or_timeout") }
+            let remainingMicroseconds = (deadline - now + 999) / 1000
+            var timeout = timeval(tv_sec: Int(remainingMicroseconds / 1_000_000),
+                                  tv_usec: Int32(remainingMicroseconds % 1_000_000))
+            guard setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &timeout,
+                             socklen_t(MemoryLayout.size(ofValue: timeout))) == 0 else {
+                throw ControlFailure("socket_timeout_configuration_failed")
+            }
             let n = Darwin.read(fd, &buffer, buffer.count)
             if n < 0 && errno == EINTR { continue }
-            guard n > 0 else { throw ControlFailure("socket_read_failed_or_timeout") }
+            guard n > 0, DispatchTime.now().uptimeNanoseconds < deadline else {
+                throw ControlFailure("socket_read_failed_or_timeout")
+            }
             if let end = buffer[..<n].firstIndex(of: 10) { data.append(contentsOf: buffer[..<end]); return data }
             data.append(contentsOf: buffer[..<n])
         }
