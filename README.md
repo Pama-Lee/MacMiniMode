@@ -36,7 +36,8 @@ Mac mini Mode turns a MacBook into an always-on home server or headless Mac. It 
 - **Quit and Allow Sleep**: choosing Quit switches to Always Off and waits until sleep is allowed. The setting stays off after reconnecting power or restarting; choose Automatic or Always On to enable it again. Logging out, restarting or shutting down macOS preserves the selected mode. Other power settings are unchanged.
 - **Screen off with the lid closed**: the built-in display's backlight turns off when you close the lid and returns to its previous brightness when you open it. Only the backlight changes, so the Mac does not lock and remote desktop or running apps are not interrupted. It never touches an external display. Can be switched off in the menu.
 - **Health Check**: one click checks whether Remote Login, Screen Sharing, the battery and power settings are ready, and copies diagnostics for bug reports.
-- **Low-battery protection**: in Always On on battery, sleep is allowed again at 10% so the Mac never runs itself flat.
+- **Low-battery protection**: in Always On on battery, sleep is allowed again at 10%. Open **Settings…** to switch to Automatic at a chosen battery level instead. Choose a threshold from 10% to 50%, and whether to stay in Automatic or restore Always On after charging.
+- **Agent tasks**: Codex and Claude Code can keep the Mac running during long jobs through MCP. Tasks share the selected mode; finishing the last task switches to Always Off. View and end tasks from the menu. See [plugin setup](docs/AGENT-CONTROL.md). Requires macOS 13 or later.
 - **Command line**: `macminimode status` and `macminimode on|off|auto`, also usable from Shortcuts with Run Shell Script.
 
 ## Updates

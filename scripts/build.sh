@@ -45,6 +45,7 @@ mkdir -p "$BUILD/obj" "$APP/Contents/MacOS" "$APP/Contents/Resources" \
 compile Sources/daemon "$DAEMON"
 compile Sources/menubar "$APP/Contents/MacOS/MacMiniMode"
 compile Sources/control "$APP/Contents/MacOS/macminimode-control"
+bash scripts/build-mcp.sh "$APP/Contents/MacOS/macminimode-mcp"
 
 sed "s/@VERSION@/$VERSION/g" Resources/Info.plist > "$APP/Contents/Info.plist"
 cp Resources/AppIcon.icns "$APP/Contents/Resources/"
@@ -62,6 +63,7 @@ else
 fi
 "${SIGN[@]}" --identifier com.macminimode.daemon "$DAEMON"
 "${SIGN[@]}" "$APP/Contents/MacOS/macminimode-control"
+"${SIGN[@]}" "$APP/Contents/MacOS/macminimode-mcp"
 "${SIGN[@]}" "$APP"
 
 echo "==> 打包"

@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "macminimode": {
+      "command": "${CLAUDE_PLUGIN_ROOT}/bin/macminimode-mcp",
+      "args": [],
+      "env": {
+        "MACMINIMODE_CONTROL": "/Applications/MacMiniMode.app/Contents/MacOS/macminimode-control"
+      }
+    }
+  }
+}
