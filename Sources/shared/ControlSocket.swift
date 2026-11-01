@@ -12,7 +12,14 @@ enum ControlWire {
 
 enum ControlSocket {
     static let productionPath = "/var/run/com.macminimode/control.sock"
-    static var clientPath: String { ProcessInfo.processInfo.environment["MACMINIMODE_SOCKET"] ?? productionPath }
+    static func clientPath(preview: Bool, override: String?) throws -> String {
+        guard preview else { return override ?? productionPath }
+        guard let override, !override.isEmpty else { throw ControlFailure("preview_socket_required") }
+        let target = URL(fileURLWithPath: override).standardizedFileURL.resolvingSymlinksInPath().path
+        let production = URL(fileURLWithPath: productionPath).resolvingSymlinksInPath().path
+        guard target != production else { throw ControlFailure("preview_requires_isolated_socket") }
+        return override
+    }
     static func address(_ path: String) throws -> sockaddr_un {
         var value = sockaddr_un()
         value.sun_family = sa_family_t(AF_UNIX)
@@ -64,7 +71,18 @@ enum ControlSocket {
         }
         throw ControlFailure("message_too_large")
     }
-    static func request(_ request: ControlRequest, path: String = clientPath) throws -> ControlResponse {
+    static func request(_ request: ControlRequest, path: String? = nil) throws -> ControlResponse {
+        let preview = CommandLine.arguments.contains("--preview")
+        let target = try clientPath(preview: preview,
+                                   override: path ?? ProcessInfo.processInfo.environment["MACMINIMODE_SOCKET"])
+        if preview {
+            let status = try exchange(ControlRequest(operation: "status"), path: target)
+            guard status.status?.simulated == true else { throw ControlFailure("preview_requires_simulated_service") }
+            if request.operation == "status" { return status }
+        }
+        return try exchange(request, path: target)
+    }
+    private static func exchange(_ request: ControlRequest, path: String) throws -> ControlResponse {
         let fd = socket(AF_UNIX, SOCK_STREAM, 0)
         guard fd >= 0 else { throw ControlFailure("socket_unavailable") }
         defer { close(fd) }
