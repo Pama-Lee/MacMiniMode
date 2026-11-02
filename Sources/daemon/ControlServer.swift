@@ -42,16 +42,17 @@ final class ControlServer: @unchecked Sendable {
                 // Serial, bounded reads prevent an unbounded worker/thread queue.
                 ControlSocket.configure(client)
                 defer { close(client) }
+                let response: ControlResponse
                 do {
                     var uid: uid_t = 0; var gid: gid_t = 0
                     guard getpeereid(client, &uid, &gid) == 0, uid == 0 || uid >= 500 else { throw ControlFailure("permission_denied") }
                     let request = try JSONDecoder().decode(ControlRequest.self, from: ControlSocket.read(client))
-                    let response = DispatchQueue.main.sync { handler(request, uid) }
-                    try ControlSocket.send(ControlWire.encoder().encode(response), fd: client)
+                    response = DispatchQueue.main.sync { handler(request, uid) }
                 } catch {
-                    let response = ControlResponse(ok: false, saved: false, applied: false, error: String(describing: error))
-                    if let data = try? ControlWire.encoder().encode(response) { try? ControlSocket.send(data, fd: client) }
+                    response = ControlResponse(ok: false, saved: false, applied: false, error: String(describing: error))
                 }
+                // A failed response write closes the connection; another response would reset its deadline.
+                if let data = try? ControlWire.encoder().encode(response) { try? ControlSocket.send(data, fd: client) }
             }
         }
     }

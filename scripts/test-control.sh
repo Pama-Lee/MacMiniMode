@@ -10,4 +10,6 @@ python3 Tests/preview_control_integration.py
 swiftc Sources/shared/*.swift Sources/daemon/*.swift -o work/tests/macmini-moded
 swiftc Sources/shared/*.swift Sources/control/*.swift -o work/tests/macminimode-control
 python3 Tests/socket_deadline_integration.py
+python3 Tests/socket_write_deadline_integration.py
+MACMINIMODE_TEST_STALL=1 python3 Tests/socket_write_deadline_integration.py
 python3 Tests/control_integration.py

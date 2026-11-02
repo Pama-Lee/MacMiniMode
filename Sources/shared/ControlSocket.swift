@@ -37,11 +37,34 @@ enum ControlSocket {
         setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &timeout, socklen_t(MemoryLayout.size(ofValue: timeout)))
     }
     static func send(_ data: Data, fd: Int32) throws {
+        let originalFlags = fcntl(fd, F_GETFL)
+        guard originalFlags >= 0, fcntl(fd, F_SETFL, originalFlags | O_NONBLOCK) == 0 else {
+            throw ControlFailure("socket_nonblocking_configuration_failed")
+        }
+        defer { _ = fcntl(fd, F_SETFL, originalFlags) }
         let bytes = Array(data) + [10]
+        let deadline = DispatchTime.now().uptimeNanoseconds + 5_000_000_000
         var sent = 0
         while sent < bytes.count {
-            let n = bytes.withUnsafeBytes { Darwin.write(fd, $0.baseAddress!.advanced(by: sent), bytes.count - sent) }
-            if n < 0 && errno == EINTR { continue }
+            let now = DispatchTime.now().uptimeNanoseconds
+            guard now < deadline else { throw ControlFailure("socket_write_timeout") }
+            // Each send must return immediately so progress cannot extend the deadline.
+            let n = bytes.withUnsafeBytes {
+                Darwin.send(fd, $0.baseAddress!.advanced(by: sent), bytes.count - sent, 0)
+            }
+            if n < 0 {
+                if errno == EINTR { continue }
+                guard errno == EAGAIN || errno == EWOULDBLOCK else { throw ControlFailure("socket_write_failed") }
+                let now = DispatchTime.now().uptimeNanoseconds
+                guard now < deadline else { throw ControlFailure("socket_write_timeout") }
+                let remainingMilliseconds = Int32((deadline - now + 999_999) / 1_000_000)
+                var descriptor = pollfd(fd: fd, events: Int16(POLLOUT), revents: 0)
+                let result = poll(&descriptor, 1, remainingMilliseconds)
+                if result < 0 && errno == EINTR { continue }
+                guard result >= 0 else { throw ControlFailure("socket_write_failed") }
+                guard result > 0 else { throw ControlFailure("socket_write_timeout") }
+                continue
+            }
             guard n > 0 else { throw ControlFailure("socket_write_failed") }
             sent += n
         }
