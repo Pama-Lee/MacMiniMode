@@ -34,8 +34,58 @@
 - **退出并恢复睡眠**：主动退出时切换到「始终关闭」，确认已允许睡眠后再退出。再次插电或重启也不会自动开启，需重新选择「自动」或「始终开启」。系统注销、重启或关机保留所选模式。其他电源设置不变。
 - **合盖熄屏**：合上盖子后自动关掉屏幕背光，开盖恢复原来的亮度。只关背光，不会锁屏，也不会打断远程桌面或正在运行的应用。接着外接显示器时不会动它。可在菜单里关闭。
 - **体检**：一键检查远程登录、屏幕共享、电池和电源设置是否就绪，并可复制诊断信息用于反馈。
-- **低电量保护**：「始终开启」时用电池，电量降到 10% 会自动放行睡眠，不会硬撑到断电。
+- **低电量保护**：「始终开启」时用电池，电量降到 10% 会自动放行睡眠。也可以在「设置…」里开启低电量切换，在 10%–50% 之间选择电量，达到后切到「自动」；充电后保持自动还是恢复始终开启，也可以自己选。
+- **Agent 任务**：Codex 和 Claude Code 可以通过 MCP 在长任务期间保持 Mac 运行。多个任务共用模式，最后一个任务结束后切到「始终关闭」。菜单里可以查看和结束任务，安装方法见[插件设置](docs/AGENT-CONTROL.zh-CN.md)。需要 macOS 13 及以上。
 - **命令行**：`macminimode status`、`macminimode on|off|auto`，也可以在快捷指令里用「运行 Shell 脚本」调用。
+
+## Codex 插件
+
+需要 macOS 13 及以上、支持插件的 Codex，以及安装在 `/Applications` 中、带 Agent 任务功能的 Mac mini 模式。
+
+准备好 `macminimode-codex-plugin.zip`。如需从当前源码构建，先安装 Xcode 命令行工具，再运行 `bash scripts/package-plugins.sh`，压缩包会生成在 `build/` 目录。
+
+### 让 Codex 自动安装
+
+在本机 Codex 聊天中附上插件 ZIP，发送：
+
+> 请为我的本机 Codex 用户安装这个 MacMiniMode 插件。把它解压到 Codex 用户目录下的固定文件夹，添加本地 marketplace，并安装 macminimode@macminimode-local。保留已有配置，检查 get_status 是否可用，并告诉我当前模式。如果需要重新加载工具，请提示我重启 Codex。
+
+按提示重启后，打开新聊天，让 Codex 检查 MacMiniMode 当前状态。
+
+### 手动安装
+
+把 ZIP 放在「下载」目录，然后运行：
+
+```sh
+mkdir -p "$HOME/.codex/local-marketplaces/macminimode"
+ditto -x -k "$HOME/Downloads/macminimode-codex-plugin.zip" "$HOME/.codex/local-marketplaces/macminimode"
+codex plugin marketplace add "$HOME/.codex/local-marketplaces/macminimode/codex"
+codex plugin add macminimode@macminimode-local
+```
+
+保留解压后的文件夹。重启 Codex，在新聊天中选择 MacMiniMode，让它检查当前状态。如果设置了自定义 `CODEX_HOME`，把命令中的 `$HOME/.codex` 换成对应目录。
+
+### 在这台 Mac 上自动使用（可选）
+
+如果希望 Codex 在各个项目的长任务中自动使用插件，把下面这段追加到用户级 `~/.codex/AGENTS.md`；设置了 `CODEX_HOME` 时则使用 `$CODEX_HOME/AGENTS.md`。保留文件中已有的指令。Codex 在新会话中读取这个文件，详见 [Codex 自定义指令](https://learn.chatgpt.com/docs/agent-configuration/agents-md)。
+
+```markdown
+## MacMiniMode
+
+在这台 Mac 上执行耗时较长的本机构建、测试和批处理前，使用已安装的
+MacMiniMode 技能。先查询 get_status，再用新 UUID 和 auto 模式调用
+begin_task。保留任务 ID，直到工作及其后台进程结束；完成、失败或取消后
+调用 end_task，没有后台工作而需要等待我回复时也结束任务。
+普通对话和短命令无需登记。只有我明确要求电池供电时继续运行，才使用 on。
+尊重手动切换的模式和低电量保护。工具不可用时告诉我。
+只有我明确要求切换模式时，才使用 set_mode。
+```
+
+也可以让 Codex 帮你追加这段内容。它对这台 Mac 上当前 Codex 用户的各个项目生效；只想在一个项目中使用，就放到那个项目的 `AGENTS.md`。移除这段指令后，恢复为按需选择插件。
+
+自动模式在插电时保持运行，最后一个任务结束后切到「始终关闭」。客户端退出或断线留下的任务，可以从菜单里的「Agent 任务」结束。
+
+Claude Code、其他 MCP 客户端和卸载方法见[插件设置](docs/AGENT-CONTROL.zh-CN.md)。
 
 ## 更新
 

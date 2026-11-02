@@ -55,14 +55,10 @@ enum QuitPolicy {
     }
 
     static func isStopped(prefix: String) -> Bool {
-        var token: Int32 = 0
-        guard notify_register_check("\(prefix).state", &token) == NOTIFY_STATUS_OK else { return false }
-        defer { notify_cancel(token) }
-        var mode: UInt64 = 0
-        guard notify_get_state(token, &mode) == NOTIFY_STATUS_OK, mode == 2,
-              let saved = try? String(contentsOfFile: "/var/db/macmini-mode", encoding: .utf8),
-              saved.trimmingCharacters(in: .whitespacesAndNewlines) == "off",
-              sleepDisabled() == false else { return false }
+        guard let response = try? ControlSocket.request(ControlRequest(operation: "status")),
+              response.ok, response.saved, response.applied,
+              let status = response.status, status.mode == .off, status.totalTasks == 0,
+              status.sleepDisabled == false, status.assertionHeld == false else { return false }
         return assertionsReleased() == true
     }
 

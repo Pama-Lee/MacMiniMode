@@ -1,0 +1,8 @@
+{
+  "name": "macminimode",
+  "version": "0.1.3",
+  "description": "Coordinate MacMiniMode power modes for local long-running tasks.",
+  "author": {
+    "name": "JASON Studio"
+  }
+}

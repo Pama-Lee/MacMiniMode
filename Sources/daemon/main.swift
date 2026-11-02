@@ -10,8 +10,24 @@ import IOKit.pwr_mgt
 import notify
 
 let dryRun = CommandLine.arguments.contains("--dry-run")
-let notifyPrefix = dryRun ? "com.macminimode.dryrun" : "com.macminimode"
+let notifyPrefix = dryRun ? (CommandLine.arguments.first { $0.hasPrefix("--notify-prefix=") }.map { String($0.dropFirst(16)) } ?? "com.macminimode.dryrun") : "com.macminimode"
 let modeFile = "/var/db/macmini-mode"
+let controlStatePath = dryRun ? (CommandLine.arguments.first { $0.hasPrefix("--state-file=") }.map { String($0.dropFirst(13)) }) : "/var/db/macminimode/control.json"
+var controlState = ControlState()
+var persistenceError: String?
+var applicationError: String?
+func saveControl() -> Bool {
+    guard let path = controlStatePath else { persistenceError = nil; return true }
+    do {
+        let dir = URL(fileURLWithPath: path).deletingLastPathComponent()
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
+        let data = try JSONEncoder().encode(controlState)
+        try data.write(to: URL(fileURLWithPath: path), options: .atomic)
+        try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: path)
+        persistenceError = nil
+        return true
+    } catch { persistenceError = "state_save_failed"; return false }
+}
 setvbuf(stdout, nil, _IOLBF, 0)
 
 func argValue(_ name: String) -> String? {
@@ -75,7 +91,12 @@ func log(_ message: String) {
     close(fd)
 }
 
+func simulatedInput() -> [String: Any]? {
+    guard dryRun, let path = argValue("--simulation-file"), let data = try? Data(contentsOf: URL(fileURLWithPath: path)) else { return nil }
+    return (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
+}
 func onACPower() -> Bool {
+    if let input = simulatedInput(), let ac = input["ac"] as? Bool { return ac }
     if let simulatedPower { return simulatedPower == "ac" }
     let info = IOPSCopyPowerSourcesInfo().takeRetainedValue()
     let type = IOPSGetProvidingPowerSourceType(info).takeUnretainedValue() as String
@@ -83,13 +104,14 @@ func onACPower() -> Bool {
 }
 
 func batteryPercent() -> Int? {
+    if let input = simulatedInput() { return (input["battery"] as? Int).flatMap { (0...100).contains($0) ? $0 : nil } }
     if let simulatedBattery { return simulatedBattery }
     let info = IOPSCopyPowerSourcesInfo().takeRetainedValue()
     for source in IOPSCopyPowerSourcesList(info).takeRetainedValue() as [CFTypeRef] {
         guard let desc = IOPSGetPowerSourceDescription(info, source)?.takeUnretainedValue() as? [String: Any],
               desc[kIOPSTypeKey] as? String == kIOPSInternalBatteryType,
               let percent = desc[kIOPSCurrentCapacityKey] as? Int else { continue }
-        return percent
+        return (0...100).contains(percent) ? percent : nil
     }
     return nil
 }
@@ -106,6 +128,7 @@ func rootDomainFlag(_ key: String) -> Bool {
 @discardableResult
 func pmset(_ args: [String]) -> Bool {
     if dryRun {
+        if simulatedInput()?["failApply"] as? Bool == true { return false }
         log("[dry-run] pmset \(args.joined(separator: " "))")
         return true
     }
@@ -114,7 +137,9 @@ func pmset(_ args: [String]) -> Bool {
     task.arguments = args
     do {
         try task.run()
-        task.waitUntilExit()
+        let deadline = Date().addingTimeInterval(3)
+        while task.isRunning && Date() < deadline { Thread.sleep(forTimeInterval: 0.01) }
+        if task.isRunning { kill(task.processIdentifier, SIGKILL); task.waitUntilExit(); return false }
     } catch {
         log("pmset \(args.joined(separator: " ")) \(L("启动失败", "failed to launch")): \(error.localizedDescription)")
         return false
@@ -156,6 +181,7 @@ func wantsMacMiniMode() -> Bool {
 // 第二道保险。disablesleep 管的是合盖睡眠，但别的程序改电源设置时会把它清掉；
 // 这个断言管空闲睡眠，在 disablesleep 被清掉到我们补回去之间，机器不会因为没人操作而睡着。
 func holdAssertion(_ on: Bool) {
+    if dryRun { State.assertion = on ? 1 : 0; return }
     if on, State.assertion == 0 {
         var id: IOPMAssertionID = 0
         let result = IOPMAssertionCreateWithName(
@@ -177,11 +203,21 @@ func holdAssertion(_ on: Bool) {
 }
 
 func sync() {
+    applicationError = nil
+    let previous = controlState
+    controlState.evaluate(ac: onACPower(), battery: batteryPercent())
+    if previous != controlState || persistenceError != nil {
+        if !saveControl() { log("Could not persist power policy transition") }
+        log("Power policy: \(controlState.mode.rawValue), \(controlState.reason ?? "recovered")")
+    }
+    let oldMode = State.mode
+    State.mode = Mode.allCases.first { $0.name == controlState.mode.rawValue } ?? .auto
+    if oldMode != State.mode || previous != controlState { publishMode() }
     updateLowBattery()
     let want = wantsMacMiniMode()
     holdAssertion(want)
     // 以系统里的真实值为准，别的工具或手动 pmset 改掉了也要纠正回来。
-    let current = dryRun ? State.applied : rootDomainFlag("SleepDisabled")
+    let current = observedSleepDisabled()
     guard want != current else {
         State.applied = want
         return
@@ -197,7 +233,7 @@ func sync() {
         State.burst += 1
         guard State.burst <= 5 else { return }
     }
-    guard pmset(["-a", "disablesleep", want ? "1" : "0"]) else { return }
+    guard pmset(["-a", "disablesleep", want ? "1" : "0"]) else { applicationError = "power_apply_failed"; return }
     State.applied = want
     if overridden {
         // 有的机器上每隔几分钟就会被改一次，只记前几次和之后每 50 次，免得日志刷屏。
@@ -241,21 +277,63 @@ func publishMode() {
 }
 
 func setMode(_ mode: Mode) {
-    // 退出时会再次请求关闭；即使模式已经是 off，也重试保存和应用，修复先前的失败。
-    guard mode != State.mode || mode == .off else { return }
-    if mode != State.mode {
-        log(L("模式切换为：", "Mode set to: ") + mode.label)
-    }
-    State.mode = mode
-    if !dryRun {
-        do {
-            try mode.name.write(toFile: modeFile, atomically: true, encoding: .utf8)
-        } catch {
-            log(L("保存模式失败", "Failed to save mode") + ": \(error.localizedDescription)")
-        }
-    }
-    publishMode()
+    controlState.manual(ControlMode(rawValue: mode.name)!)
+    _ = saveControl()
+    log("Mode set manually: \(mode.name)")
     sync()
+    publishMode()
+    // Keep the legacy mode file for older diagnostic clients.
+    if !dryRun { try? mode.name.write(toFile: modeFile, atomically: true, encoding: .utf8) }
+}
+
+func observedSleepDisabled() -> Bool? {
+    if dryRun { return State.applied }
+    let root = IOServiceGetMatchingService(kIOMainPortDefault, IOServiceMatching("IOPMrootDomain"))
+    guard root != 0 else { return nil }
+    defer { IOObjectRelease(root) }
+    return IORegistryEntryCreateCFProperty(root, "SleepDisabled" as CFString, kCFAllocatorDefault, 0)?.takeRetainedValue() as? Bool
+}
+
+func controlStatus(_ uid: UInt32) -> ControlStatus {
+    ControlStatus(mode: controlState.mode, sleepDisabled: observedSleepDisabled(), assertionHeld: State.assertion != 0,
+                  acPower: onACPower(), battery: batteryPercent(), tasks: controlState.tasks.filter { uid == 0 || $0.uid == uid },
+                  totalTasks: controlState.tasks.count, settings: controlState.settings, reason: controlState.reason ?? (State.lowBattery ? "fixed_low_battery_protection" : nil),
+                  waitingForRecovery: controlState.restoreManual || controlState.tasks.contains { $0.suspended }, simulated: dryRun)
+}
+
+func handleControl(_ request: ControlRequest, _ uid: UInt32) -> ControlResponse {
+    do {
+        var candidate = controlState
+        switch request.operation {
+        case "status": break
+        case "set_mode":
+            guard let mode = request.mode else { throw ControlFailure("missing_mode") }
+            candidate.manual(mode)
+        case "begin_task":
+            guard let id = request.id, let name = request.name, let source = request.source else { throw ControlFailure("missing_task_fields") }
+            try candidate.begin(id: id, uid: uid, name: name, source: source, mode: request.mode ?? .auto, ac: onACPower(), battery: batteryPercent())
+        case "end_task":
+            guard let id = request.id else { throw ControlFailure("missing_task_id") }
+            try candidate.end(id: id, uid: uid)
+        case "configure":
+            guard let settings = request.settings else { throw ControlFailure("missing_settings") }
+            try candidate.configure(settings)
+        default: throw ControlFailure("unknown_operation")
+        }
+        if request.operation != "status" {
+            let previous = controlState
+            controlState = candidate
+            guard saveControl() else { controlState = previous; throw ControlFailure("state_save_failed") }
+            log("Control: \(request.operation), uid=\(uid)")
+        }
+        if request.operation != "status" { sync(); publishMode() }
+        let status = controlStatus(uid)
+        let applied = status.sleepDisabled == wantsMacMiniMode() && (State.assertion != 0) == wantsMacMiniMode() && applicationError == nil
+        let error = persistenceError ?? applicationError ?? (applied ? nil : "application_not_confirmed")
+        return ControlResponse(ok: error == nil, saved: persistenceError == nil, applied: applied, error: error, status: status)
+    } catch {
+        return ControlResponse(ok: false, saved: false, applied: false, error: String(describing: error), status: controlStatus(uid))
+    }
 }
 
 func shutdown(_ name: String) {
@@ -283,6 +361,18 @@ if !dryRun,
    let saved = try? String(contentsOfFile: modeFile, encoding: .utf8).trimmingCharacters(in: .whitespacesAndNewlines),
    let mode = Mode.allCases.first(where: { $0.name == saved }) {
     State.mode = mode
+}
+
+controlState.mode = ControlMode(rawValue: State.mode.name)!
+if let path = controlStatePath, FileManager.default.fileExists(atPath: path) {
+    do {
+        let loaded = try JSONDecoder().decode(ControlState.self, from: Data(contentsOf: URL(fileURLWithPath: path)))
+        guard loaded.version == 1, (10...50).contains(loaded.settings.threshold) else { throw ControlFailure("invalid_saved_state") }
+        controlState = loaded
+    } catch {
+        log("Invalid control state; refusing to overwrite it: \(error)")
+        exit(1)
+    }
 }
 
 notify_register_check("\(notifyPrefix).state", &State.stateToken)
@@ -330,4 +420,10 @@ log(L("macmini-moded 启动", "macmini-moded started") + (dryRun ? " (dry-run)" 
     + L("，模式：", ", mode: ") + State.mode.label)
 publishMode()
 sync()
+let socketPath = dryRun ? (argValue("--socket") ?? "/tmp/macminimode-dryrun-\(getuid())/control.sock") : ControlSocket.productionPath
+let controlServer: ControlServer
+do {
+    controlServer = try ControlServer(path: socketPath, handler: handleControl)
+    controlServer.start()
+} catch { log("Control server failed: \(error)"); exit(1) }
 CFRunLoopRun()

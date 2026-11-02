@@ -1,2 +1,9 @@
 build/
 .DS_Store
+
+work/
+MCP/.build/
+__pycache__/
+
+# Generated, signed MCP executables distributed in plugin archives.
+plugins/*/bin/

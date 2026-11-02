@@ -1,0 +1,20 @@
+{
+  "name": "macminimode-local",
+  "interface": {
+    "displayName": "MacMiniMode"
+  },
+  "plugins": [
+    {
+      "name": "macminimode",
+      "source": {
+        "source": "local",
+        "path": "./"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity"
+    }
+  ]
+}

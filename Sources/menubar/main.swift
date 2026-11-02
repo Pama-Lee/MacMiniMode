@@ -8,7 +8,8 @@ import IOKit.ps
 import notify
 
 let logPath = "/var/log/macmini-mode.log"
-let notifyPrefix = "com.macminimode"
+let previewMode = CommandLine.arguments.contains("--preview")
+let notifyPrefix = previewMode ? "com.macminimode.preview" : "com.macminimode"
 
 // 界面和日志跟随系统首选语言：中文环境用中文，其余用英文。
 let isChinese = Locale.preferredLanguages.first?.hasPrefix("zh") ?? false
@@ -67,6 +68,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     var switchItems: [NSMenuItem] = []
     let updater = Updater()
     let health = HealthWindowController()
+    let powerSettings = PowerSettingsController()
+    let tasksItem = NSMenuItem(title: L("Agent 任务", "Agent Tasks"), action: nil, keyEquivalent: "")
+    var controlRefreshPending = false
     let lidScreen = LidScreen()
     let lidScreenItem = NSMenuItem(title: L("合盖时熄灭屏幕", "Turn Off Screen When Lid Is Closed"), action: #selector(toggleLidScreen), keyEquivalent: "")
     let installItem = NSMenuItem(title: "", action: #selector(installUpdate), keyEquivalent: "")
@@ -78,9 +82,32 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     // 只有点了菜单里的「退出并恢复睡眠」才算用户主动退出。其他途径的退出（系统注销、重启、
     // 活动监视器、脚本）一律不改模式：把后台服务永久切到关闭必须是明确的用户操作。
     private var userRequestedQuit = false
+    private var quitStopConfirmed = false
+    private var quitAttempt = UUID()
     @MainActor private lazy var quitController = QuitController(
-        requestStop: { notify_post("\(notifyPrefix).set-off") },
-        hasStopped: { QuitPolicy.isStopped(prefix: notifyPrefix) })
+        requestStop: { [weak self] in self?.requestQuitStop() },
+        hasStopped: { [weak self] in self?.quitStopConfirmed ?? false })
+
+    func requestQuitStop() {
+        quitStopConfirmed = false
+        let attempt = UUID()
+        quitAttempt = attempt
+        // Socket deadlines must never block AppKit's main event loop.
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            _ = try? ControlSocket.request(ControlRequest(operation: "set_mode", mode: .off))
+            let deadline = Date().addingTimeInterval(4)
+            repeat {
+                if QuitPolicy.isStopped(prefix: notifyPrefix) {
+                    DispatchQueue.main.async {
+                        guard self?.quitAttempt == attempt else { return }
+                        self?.quitStopConfirmed = true
+                    }
+                    return
+                }
+                Thread.sleep(forTimeInterval: 0.1)
+            } while Date() < deadline
+        }
+    }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         let menu = NSMenu()
@@ -102,6 +129,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         lidScreenItem.toolTip = L("只关背光，不锁屏。万一开盖后屏幕还是黑的，按键盘上的亮度增加键（F2）即可。",
                                   "Only the backlight is switched off; the Mac does not lock. If the screen is still dark after opening the lid, press the brightness-up key (F2).")
         menu.addItem(lidScreenItem)
+        let settingsItem = NSMenuItem(title: L("设置…", "Settings…"), action: #selector(openSettings), keyEquivalent: ",")
+        settingsItem.target = self
+        menu.addItem(settingsItem)
+        menu.addItem(tasksItem)
         menu.addItem(.separator())
         let healthItem = NSMenuItem(title: L("体检…", "Health Check…"), action: #selector(openHealth), keyEquivalent: "")
         healthItem.target = self
@@ -127,7 +158,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         statusItem.menu = menu
 
         updater.onChange = { [weak self] in self?.refresh() }
-        updater.start()
+        if !previewMode { updater.start() }
+        if CommandLine.arguments.contains("--settings") { powerSettings.show() }
         if CommandLine.arguments.contains("--health-check") { health.show() }
 
         notify_register_dispatch("\(notifyPrefix).state", &stateToken, .main) { [weak self] _ in
@@ -144,14 +176,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         timer = Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { [weak self] _ in self?.refresh() }
         // 合盖要尽快反应，单独每秒看一次盖子；只读一个系统属性，开销可以忽略。
         lidTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
+            guard !previewMode else { return }
             self?.lidScreen.tick(modeOn: rootDomainFlag("SleepDisabled"), lidClosed: rootDomainFlag("AppleClamshellState"))
         }
         // 上次如果没来得及恢复亮度（比如被强制结束），启动时补上。
-        if !rootDomainFlag("AppleClamshellState") { lidScreen.restore() }
+        if !previewMode && !rootDomainFlag("AppleClamshellState") { lidScreen.restore() }
         // 安装器升级时会用信号结束这个进程，退出前先把亮度还回去。
         signal(SIGTERM, SIG_IGN)
         termSource.setEventHandler { [weak self] in
-            self?.lidScreen.restore()
+            if !previewMode { self?.lidScreen.restore() }
             exit(0)
         }
         termSource.resume()
@@ -163,7 +196,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     func applicationWillTerminate(_ notification: Notification) {
-        lidScreen.restore()
+        if !previewMode { lidScreen.restore() }
     }
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
@@ -195,6 +228,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     func refresh() {
+        refreshControl()
         let enabled = rootDomainFlag("SleepDisabled")
         let running = daemonRunning()
         var rawMode: UInt64 = 0
@@ -224,6 +258,66 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         lidScreenItem.state = lidScreen.enabled ? .on : .off
     }
 
+    @objc func openSettings() { powerSettings.show() }
+
+    func refreshControl() {
+        guard !controlRefreshPending else { return }
+        controlRefreshPending = true
+        DispatchQueue.global(qos: .utility).async { [weak self] in
+            let response = try? ControlSocket.request(ControlRequest(operation: "status"))
+            DispatchQueue.main.async {
+                guard let self else { return }
+                self.controlRefreshPending = false
+                let menu = NSMenu()
+                if let status = response?.status {
+                    self.tasksItem.title = L("Agent 任务", "Agent Tasks") + " (\(status.totalTasks))"
+                    if let reason = status.reason {
+                        let label = NSMenuItem(title: reason == "low_battery_automatic" ? L("低电量：已切换为自动", "Low battery: switched to Automatic") : L("低电量保护已生效", "Low-battery protection active"), action: nil, keyEquivalent: "")
+                        menu.addItem(label)
+                    }
+                    if status.waitingForRecovery { menu.addItem(withTitle: L("等待电量恢复", "Waiting for power recovery"), action: nil, keyEquivalent: "") }
+                    let formatter = DateFormatter(); formatter.dateStyle = .short; formatter.timeStyle = .short
+                    for task in status.tasks {
+                        let title = "\(task.name) · \(task.source) · \(formatter.string(from: task.started))"
+                        let entry = NSMenuItem(title: title, action: nil, keyEquivalent: "")
+                        let submenu = NSMenu()
+                        let end = NSMenuItem(title: L("结束此任务", "End This Task"), action: #selector(self.endTask(_:)), keyEquivalent: "")
+                        end.target = self; end.representedObject = task.id
+                        submenu.addItem(end); entry.submenu = submenu; menu.addItem(entry)
+                    }
+                    if status.totalTasks == 0 { menu.addItem(withTitle: L("没有活动任务", "No active tasks"), action: nil, keyEquivalent: "") }
+                    let clear = NSMenuItem(title: L("结束全部任务并恢复睡眠", "End All Tasks and Allow Sleep"), action: #selector(self.clearTasks), keyEquivalent: "")
+                    clear.target = self; menu.addItem(clear)
+                } else {
+                    self.tasksItem.title = L("Agent 任务（服务不可用）", "Agent Tasks (service unavailable)")
+                }
+                self.tasksItem.submenu = menu
+            }
+        }
+    }
+    @objc func endTask(_ sender: NSMenuItem) {
+        guard let id = sender.representedObject as? String else { return }
+        sendControl(ControlRequest(operation: "end_task", id: id))
+    }
+    @objc func clearTasks() { sendControl(ControlRequest(operation: "set_mode", mode: .off)) }
+    func sendControl(_ request: ControlRequest) {
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            let result = Result { try ControlSocket.request(request) }
+            DispatchQueue.main.async {
+                self?.refreshSoon()
+                let error: String?
+                switch result {
+                case .success(let response): error = response.ok ? nil : response.error
+                case .failure(let failure): error = String(describing: failure)
+                }
+                if let error {
+                    let alert = NSAlert(); alert.messageText = L("操作未完成", "Operation Incomplete")
+                    alert.informativeText = error; NSApp.activate(ignoringOtherApps: true); alert.runModal()
+                }
+            }
+        }
+    }
+
     @objc func toggleLidScreen() {
         lidScreen.enabled.toggle()
         refresh()
@@ -243,7 +337,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     @objc func selectMode(_ sender: NSMenuItem) {
-        notify_post("\(notifyPrefix).set-\(modes[sender.tag].name)")
+        sendControl(ControlRequest(operation: "set_mode", mode: ControlMode(rawValue: modes[sender.tag].name)))
     }
 
     @objc func quitAndAllowSleep() {

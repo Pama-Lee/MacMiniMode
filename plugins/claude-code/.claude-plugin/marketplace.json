@@ -1,0 +1,15 @@
+{
+  "name": "macminimode-local",
+  "owner": {
+    "name": "JASON Studio"
+  },
+  "plugins": [
+    {
+      "name": "macminimode",
+      "source": "./"
+    }
+  ],
+  "metadata": {
+    "description": "MacMiniMode task control"
+  }
+}
